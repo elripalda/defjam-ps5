@@ -297,6 +297,12 @@ static void open_log_if_needed(void)
     struct tm *t = localtime(&now);
     struct stat st;
 
+#if defined(__PROSPERO__)
+    /* [ps5 port] ps5/src/host_ps5.c already sends the output to the app's
+     * logs folder; a relative path here would fail and close it. */
+    (void)name; (void)now; (void)t; (void)st;
+    return;
+#endif
     /* A terminal, a pipe or a file the caller chose all keep the output;
      * only /dev/null, which is what a launcher hands a program, loses it. */
     if (fstat(STDERR_FILENO, &st) == 0

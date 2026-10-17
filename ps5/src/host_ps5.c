@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -411,15 +412,21 @@ const char *ps5_game_xbe(void) { ps5_root(); return s_game_xbe; }
 
 int host_posix_run(int (*game_main)(void));
 
+/* Its own descriptor on the log, so a report survives anything that closed
+ * stderr's stream. */
+static int s_crash_fd = -1;
+
 static void early_fault(int sig, siginfo_t *si, void *uctx)
 {
     uintptr_t pc = mmio_trap_pc(uctx);
     uintptr_t self = (uintptr_t)&host_posix_run;
-    char msg[200];
-    fprintf(stderr, "[PS5] early crash: signal %d at pc 0x%llx (host_posix_run is at 0x%llx), "
-                    "address 0x%llx, thread %p\n", sig, (unsigned long long)pc,
-            (unsigned long long)self, (unsigned long long)(uintptr_t)si->si_addr,
-            (void *)pthread_self());
+    char msg[300];
+    int n = snprintf(msg, sizeof msg, "[PS5] early crash: signal %d at pc 0x%llx (host_posix_run is at 0x%llx), "
+                     "address 0x%llx, thread %p\n", sig, (unsigned long long)pc,
+                     (unsigned long long)self, (unsigned long long)(uintptr_t)si->si_addr,
+                     (void *)pthread_self());
+    if (s_crash_fd >= 0 && n > 0)
+        write(s_crash_fd, msg, (size_t)n);
     snprintf(msg, sizeof msg, "Def Jam crashed early (signal %d). Send logs/defjam.log.err.", sig);
     ps5_notify(msg);
     sleep(2);
@@ -483,6 +490,8 @@ int host_posix_run(int (*game_main)(void))
     setvbuf(stderr, NULL, _IONBF, 0);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
+    snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);
+    s_crash_fd = open(log, O_WRONLY | O_APPEND);
     early_fault_handler();
     fprintf(stderr, "[PS5] host_posix_run is at %p\n", (void *)&host_posix_run);
     {   /* The decoder for trapped device registers reads instructions from

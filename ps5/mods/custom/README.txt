@@ -1,7 +1,6 @@
 Put your own versions of these pictures in this folder, with these names:
 
-  title-logo.png          the Def Jam logo on the title screen (512x128)
-  title-logo-attract.png  the same logo on the attract/demo start screen (512x128)
+  title-logo.png          the Def Jam logo on the title and attract screens (512x128)
   story-logo.png          the logo used in Story mode (512x128)
   console-small.png       the Xbox console on the loading and save screens (128x64)
   autosave-panel.png      the autosave warning, console picture included (512x256)

@@ -170,6 +170,11 @@ mkdir -p "$app/mods/custom" "$app/text"
 python3 "$port/ps5/tools/make_ps_buttons.py" "$app/mods/playstation" \
     || echo "warning: could not draw the PlayStation buttons (needs Pillow)" >&2
 cp "$port/ps5/mods/custom/manifest.ini" "$port/ps5/mods/custom/README.txt" "$app/mods/custom/"
+# The owner's own pictures (not in the repository: ps5/assets is local).
+if compgen -G "$port/ps5/assets/mods/custom/*.png" >/dev/null; then
+    cp "$port"/ps5/assets/mods/custom/*.png "$app/mods/custom/"
+    chmod 644 "$app"/mods/custom/*.png
+fi
 cp "$port/ps5/text/replace.txt" "$app/text/"
 mkdir -p "$app/GameData"
 cat > "$app/GameData/PUT GAME FILES HERE.txt" <<'TXT'

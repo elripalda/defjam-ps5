@@ -125,6 +125,22 @@ EOF
 for asset in icon0.png pic0.dds pic1.dds snd0.at9; do
     [[ -f $port/ps5/assets/sce_sys/$asset ]] && cp "$port/ps5/assets/sce_sys/$asset" "$app/sce_sys/$asset"
 done
+# The in-game menu's font (Dear ImGui ships Roboto; Apache License 2.0).
+imgui=$(sed -n 's/^FETCHCONTENT_SOURCE_DIR_IMGUI:PATH=//p' "$build/CMakeCache.txt")
+if [[ -n $imgui && -f $imgui/misc/fonts/Roboto-Medium.ttf ]]; then
+    mkdir -p "$app/fonts"
+    cp "$imgui/misc/fonts/Roboto-Medium.ttf" "$app/fonts/"
+    cat > "$app/fonts/README.txt" <<'TXT'
+Roboto-Medium.ttf: Roboto by Christian Robertson, https://fonts.google.com/specimen/Roboto
+Licensed under the Apache License, Version 2.0 (LICENSE-Apache-2.0.txt).
+Used for the in-game menu.
+TXT
+    if [[ -f /usr/share/common-licenses/Apache-2.0 ]]; then
+        cp /usr/share/common-licenses/Apache-2.0 "$app/fonts/LICENSE-Apache-2.0.txt"
+    fi
+else
+    echo "warning: no Roboto font found; the in-game menu uses Dear ImGui's built-in one" >&2
+fi
 mkdir -p "$app/GameData"
 cat > "$app/GameData/PUT GAME FILES HERE.txt" <<'TXT'
 Copy everything from your extracted Def Jam: Fight for NY (USA) Xbox disc into

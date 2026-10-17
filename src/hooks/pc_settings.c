@@ -43,6 +43,15 @@ static const char *const k_ws_fill[] = { "blur", "black", NULL };
 /* A four-fighter match holds about 2 GiB of replacements. At 512 MiB the cache evicted and
  * re-decoded dozens of textures every two seconds in a fight on the Steam Deck. */
 #define TEXTURE_CACHE_MB 2048
+#if defined(__PROSPERO__)
+/* [ps5 port] A TV, 16:9 and 4K: widescreen, and the picture drawn at four
+ * times the console's resolution (3413x1920 in 16:9) for a 3840x2160 output. */
+#define DEFAULT_ASPECT 3        /* 16:9 */
+#define DEFAULT_RENDER_SCALE 4
+#else
+#define DEFAULT_ASPECT 0        /* 4:3 */
+#define DEFAULT_RENDER_SCALE 2
+#endif
 static RecompSetting g_display_settings[] = {
     { "textures", "enabled", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
       "Use texture packs from the data folder's mods directory." },
@@ -59,7 +68,7 @@ static RecompSetting g_display_settings[] = {
     { "display", "window_width", RECOMP_SETTING_INT, 1280, 320, 16384, NULL, NULL, 0,
       "Window size when not full screen. Resizing the window updates these." },
     { "display", "window_height", RECOMP_SETTING_INT, 960, 240, 16384, NULL, NULL, 0, NULL },
-    { "display", "aspect", RECOMP_SETTING_ENUM, 0, 0, 0, k_aspect, "RECOMP_ASPECT", 0,
+    { "display", "aspect", RECOMP_SETTING_ENUM, DEFAULT_ASPECT, 0, 0, k_aspect, "RECOMP_ASPECT", 0,
       "4:3 keeps the console's picture shape with black bars; stretch fills the window; the widescreen shapes "
       "(beta) widen the 3D view and keep menus, HUD and movies in shape, and start with the game." },
     { "display", "widescreen_hud", RECOMP_SETTING_ENUM, 0, 0, 0, k_ws_hud, NULL, RECOMP_SETTING_RESTART,
@@ -70,7 +79,7 @@ static RecompSetting g_display_settings[] = {
       "Beside 4:3 pictures (movies, menu backgrounds) in widescreen: a soft blurred extension, or black." },
     { "display", "widescreen_fov_cap", RECOMP_SETTING_INT, 150, 90, 170, NULL, NULL, RECOMP_SETTING_RESTART,
       "Widest horizontal field of view widescreen may use, in degrees (only very wide screens reach it)." },
-    { "display", "render_scale", RECOMP_SETTING_INT, 2, 1, 4, NULL, "RECOMP_RENDER_SCALE",
+    { "display", "render_scale", RECOMP_SETTING_INT, DEFAULT_RENDER_SCALE, 1, 4, NULL, "RECOMP_RENDER_SCALE",
       RECOMP_SETTING_RESTART,
       "Internal resolution as a multiple of the console's 640x480. Higher is sharper and costs GPU time." },
     { "display", "filter", RECOMP_SETTING_ENUM, 0, 0, 0, k_filter, NULL, 0,
@@ -80,6 +89,12 @@ static RecompSetting g_display_settings[] = {
     { "display", "gamma", RECOMP_SETTING_BOOL, 1, 0, 0, NULL, "RECOMP_GAMMA",
       RECOMP_SETTING_RESTART,
       "Apply the game's own brightness curve, as the console does." },
+#if defined(__PROSPERO__)
+    { "display", "output_4k", RECOMP_SETTING_BOOL, 1, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
+      "Send 3840x2160 to the TV when it takes it; off, or a TV without it, gets 1920x1080." },
+    { "ps5", "defaults", RECOMP_SETTING_INT, 0, 0, 1000, NULL, NULL, 0,
+      "Which set of console defaults this file has been brought up to. Leave it as it is." },
+#endif
 };
 #define DISPLAY_SETTING_COUNT (sizeof(g_display_settings) / sizeof(g_display_settings[0]))
 
@@ -534,6 +549,24 @@ int pc_settings_init(void)
         if (read < (int)g_setting_count && recomp_settings_save(g_path))
             fprintf(stderr, "[SETTINGS] could not write %s\n", g_path);
     }
+#if defined(__PROSPERO__)
+    {
+        /* [ps5 port] A settings.ini written by an earlier build holds that
+         * build's defaults (4:3, twice the console's resolution), which win
+         * over new ones. Once per new set: bring it up to this build's. */
+        enum { PS5_DEFAULTS = 21 };
+        if (recomp_settings_get("ps5", "defaults", 0) < PS5_DEFAULTS) {
+            recomp_settings_set("display", "aspect", DEFAULT_ASPECT);
+            recomp_settings_set("display", "render_scale", DEFAULT_RENDER_SCALE);
+            recomp_settings_set("display", "output_4k", 1);
+            recomp_settings_set("ui", "show_fps", 1);
+            recomp_settings_set_text("ui", "overlay_pad", "left_stick_click+right_stick_click");
+            recomp_settings_set("ps5", "defaults", PS5_DEFAULTS);
+            if (g_path[0] && recomp_settings_save(g_path) == 0)
+                fprintf(stderr, "[SETTINGS] brought up to the console's defaults (set %d)\n", PS5_DEFAULTS);
+        }
+    }
+#endif
     if (have_root)
         fprintf(stderr, "[SETTINGS] data folder %s\n", root);
     else

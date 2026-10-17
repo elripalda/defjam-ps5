@@ -137,6 +137,7 @@ static const char *friendly(const char *section, const char *key)
         { "launcher", "skip", "Skip the launcher at start" }, { "ui", "scale", "Text and control size" },
         { "debug", "unlock_all", "Debug - Unlock all Fighters and Venues (Requires Restart)" },
         { "ui", "overlay_pad", "Overlay pad buttons" }, { "ui", "overlay_key", "Overlay key" },
+        { "display", "output_4k", "4K output" }, { "ui", "show_fps", "Frame counter" },
     };
     for (const Label &l : labels)
         if (!strcmp(l.section, section) && !strcmp(l.key, key)) return l.text;
@@ -415,6 +416,15 @@ void ui_context_begin(UiWindow window)
         if (GetFileAttributesA(font) != INVALID_FILE_ATTRIBUTES)
             io.Fonts->AddFontFromFileTTF(font, 17.0f);
     }
+#elif defined(__PROSPERO__)
+    {
+        // [ps5 port] No system fonts to borrow: the app carries Roboto (fonts/ in its folder).
+        const char *root = getenv("DEFJAM_DATA");
+        std::string font = std::string(root ? root : "/app0") + "/fonts/Roboto-Medium.ttf";
+        struct stat st;
+        if (stat(font.c_str(), &st) == 0)
+            io.Fonts->AddFontFromFileTTF(font.c_str(), 17.0f);
+    }
 #else
     static const char *const fonts[] = {
         "/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc",
@@ -506,6 +516,28 @@ static void settings_group(const char *section, std::initializer_list<const char
 
 // ---- the pages ----------------------------------------------------------------------------------------------
 
+#if defined(__PROSPERO__)
+// [ps5 port] A TV, not a window: the picture's shape, its sharpness and the output.
+static void page_display()
+{
+    ImGui::SeparatorText("Picture");
+    settings_group("display", { "aspect" });
+    if (recomp_settings_get("display", "aspect", 0) >= 2) {
+        ImGui::Indent();
+        settings_group("display", { "widescreen_hud", "widescreen_cutscenes", "widescreen_side_fill" });
+        ImGui::TextWrapped("Widescreen: the 3D view gets wider; menus, the HUD and movies keep their shape.");
+        ImGui::Unindent();
+    }
+    settings_group("display", { "filter" });
+    ImGui::SeparatorText("Quality");
+    settings_group("display", { "render_scale", "output_4k", "gamma" });
+    ImGui::TextWrapped("Render scale 4 draws the game at 3413x1920 in 16:9, close to 4K; lower it if the frame counter "
+                       "drops below 60. The picture shape, render scale, 4K output and brightness curve apply the next "
+                       "time the game starts; the filter applies at once.");
+    ImGui::SeparatorText("While playing");
+    settings_group("ui", { "show_fps" });
+}
+#else
 static void page_display()
 {
     ImGui::SeparatorText("Window and picture");
@@ -526,7 +558,10 @@ static void page_display()
     ImGui::TextWrapped("Full screen, window size, filter, vsync and the 4:3 and stretch shapes apply as you change them. "
                        "The widescreen shapes, render scale and the brightness curve apply the next time the game starts. "
                        "F11 or Alt+Enter switches full screen while playing.");
+    ImGui::SeparatorText("While playing");
+    settings_group("ui", { "show_fps" });
 }
+#endif
 
 static void page_textures()
 {
@@ -593,15 +628,19 @@ static void page_controllers()
     }
     ImGui::TextWrapped("Press buttons and push the sticks to check them. The circles show the sticks after the dead zones below.");
 
+#if !defined(__PROSPERO__)
     ImGui::SeparatorText("Who plays");
     settings_group("input", { "keyboard_player", "players", "backend" });
+#endif
     ImGui::SeparatorText("Sticks and triggers");
     settings_group("gamepad", { "left_deadzone", "right_deadzone", "trigger_threshold", "button_threshold",
                                 "left_stick", "right_stick" });
     ImGui::SeparatorText("Rumble");
     settings_group("input", { "rumble", "rumble_floor", "rumble_min_ms", "rumble_on_connect" });
+#if !defined(__PROSPERO__)
     ImGui::SeparatorText("Pointer");
     settings_group("input", { "hide_cursor", "confine_cursor" });
+#endif
 }
 
 static void page_pad_buttons()
@@ -752,6 +791,48 @@ static void open_folder()
 }
 #endif
 
+#if defined(__PROSPERO__)
+// [ps5 port] No launcher, no keyboard, no file manager.
+static void page_general(UiMode)
+{
+    ImGui::SeparatorText("This menu");
+    {
+        RecompSetting *p = find("ui", "overlay_pad");
+        if (p) setting_widget(p);
+        ImGui::TextWrapped("Hold L3 and R3 (both stick clicks) for half a second to open or close this menu; Circle "
+                           "also closes it. While it is open the game sees no input and keeps running.");
+    }
+    settings_group("ui", { "scale" });
+    ImGui::SeparatorText("Debug");
+    settings_group("debug", { "unlock_all" });
+    ImGui::TextWrapped("For testing: every fighter and venue is available on any profile. It changes the profile in memory "
+                       "and asks the game to save it, so keep it off for a save you care about.");
+    ImGui::SeparatorText("Files");
+    ImGui::TextWrapped("Settings are saved as you change them in: %s", pc_settings_path());
+    static bool confirm_reset;
+    if (ImGui::Button("Reset every setting to default")) confirm_reset = true;
+    if (confirm_reset) ImGui::OpenPopup("Reset every setting?");
+    if (ImGui::BeginPopupModal("Reset every setting?", &confirm_reset, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Display, controller and menu settings all go back to their defaults.");
+        if (ImGui::Button("Reset")) {
+            for (size_t i = 0; i < recomp_settings_count(); i++) {
+                RecompSetting *s = recomp_settings_at(i);
+                if (strcmp(s->section, "ps5"))
+                    recomp_settings_reset_to_default(s->section, s->key);
+            }
+            commit();
+            confirm_reset = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) { confirm_reset = false; ImGui::CloseCurrentPopup(); }
+        ImGui::EndPopup();
+    }
+    ImGui::SeparatorText("About");
+    ImGui::Text("Def Jam: Fight for NY - Recompiled, PS5 version %s", DEFJAM_VERSION);
+    ImGui::TextDisabled("Dear ImGui %s (MIT)  -  SDL3 (zlib)  -  Roboto (Apache 2.0)", IMGUI_VERSION);
+}
+#else
 static void page_general(UiMode mode)
 {
     ImGui::SeparatorText("Start-up");
@@ -812,6 +893,7 @@ static void page_general(UiMode mode)
     ImGui::Text("Def Jam: Fight for NY - Recompiled, version %s", DEFJAM_VERSION);
     ImGui::TextDisabled("Dear ImGui %s (MIT)  -  SDL3 (zlib)", IMGUI_VERSION);
 }
+#endif
 
 UiResult ui_draw(UiMode mode, float x, float y, float width, float height)
 {
@@ -836,10 +918,14 @@ UiResult ui_draw(UiMode mode, float x, float y, float width, float height)
     ImGui::BeginChild("page", ImVec2(0, -footer), ImGuiChildFlags_None);
     if (ImGui::BeginTabBar("pages")) {
         if (ImGui::BeginTabItem("Display")) { page_display(); ImGui::EndTabItem(); }
+#if !defined(__PROSPERO__)     /* [ps5 port] no texture packs or keyboard on the console yet */
         if (ImGui::BeginTabItem("Textures")) { page_textures(); ImGui::EndTabItem(); }
+#endif
         if (ImGui::BeginTabItem("Controllers")) { page_controllers(); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Pad buttons")) { page_pad_buttons(); ImGui::EndTabItem(); }
+#if !defined(__PROSPERO__)
         if (ImGui::BeginTabItem("Keyboard & mouse")) { page_keyboard(); ImGui::EndTabItem(); }
+#endif
         if (ImGui::BeginTabItem("General")) { page_general(mode); ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }
@@ -865,9 +951,13 @@ UiResult ui_draw(UiMode mode, float x, float y, float width, float height)
         ImGui::PopStyleColor(2);
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere(-1);
     } else {
+#if !defined(__PROSPERO__)
         RecompSetting *skip = find("launcher", "skip");
         if (skip) setting_widget(skip);
         ImGui::SameLine(ImGui::GetWindowWidth() - bw - ImGui::GetStyle().WindowPadding.x);
+#else
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - bw - ImGui::GetStyle().WindowPadding.x);
+#endif
         if (ImGui::Button("Close", ImVec2(bw, 0))) result.leave = true;
     }
     ImGui::End();
@@ -884,6 +974,7 @@ namespace {
 
 std::atomic<bool> g_open(false);
 std::atomic<bool> g_toggle(false);
+std::atomic<bool> g_show_fps(false);    // [ui] show_fps: the frame counter, drawn even with the overlay closed
 bool g_just_opened = false;
 bool g_ready = false;               // the context and backends exist (under the lock)
 #if defined(_WIN32)
@@ -972,6 +1063,7 @@ extern "C" void pc_ui_apply_settings(void)
     int vk = input_key_from_name(key.c_str());
     g_overlay_vk = vk > 0 ? vk : VK_F1;
     parse_chords();
+    g_show_fps = recomp_settings_get("ui", "show_fps", 0) != 0;
     if (g_ready) ui_apply_scale(g_window);
     ui_unlock();
 }
@@ -1182,6 +1274,20 @@ namespace {
 uint32_t g_vk_generation;
 std::atomic<unsigned> g_frame_w(0), g_frame_h(0);       // what the overlay was last drawn into, in pixels
 
+#if defined(__PROSPERO__)
+// [ps5 port] A first-run guard: the overlay's Vulkan drawing has not run on the console before, and
+// with the frame counter on it starts on the first frame. A marker file is written before it starts
+// and removed once a frame has gone through; found at start-up, the last start failed there, and the
+// overlay stays off for this run (the next run tries again).
+std::string overlay_guard_path()
+{
+    const char *root = getenv("DEFJAM_DATA");
+    return std::string(root ? root : "/app0") + "/logs/overlay-starting";
+}
+bool g_overlay_off = false;
+int g_guard_frames = -1;            // frames drawn since the marker was written; -1 none written
+#endif
+
 // Asked once a frame whether to draw: this is where the hotkey and the pad chord are looked for.
 int overlay_active(void *)
 {
@@ -1189,15 +1295,71 @@ int overlay_active(void *)
     if (!configured) {
         configured = true;
         pc_ui_apply_settings();
+#if defined(__PROSPERO__)
+        struct stat st;
+        if (stat(overlay_guard_path().c_str(), &st) == 0) {
+            g_overlay_off = true;
+            unlink(overlay_guard_path().c_str());
+            fprintf(stderr, "[UI] the in-game menu did not start last time; it is off for this run\n");
+        }
+#endif
     }
+#if defined(__PROSPERO__)
+    if (g_overlay_off)
+        return 0;
+#endif
     ui_lock();
     bool toggled = g_toggle.exchange(false);
     if (!ui_capturing() && !g_chords.empty() && pad_toggle_pressed()) toggled = true;
     if (toggled) set_open(!g_open.load());
     bool open = g_open.load();
     ui_unlock();
-    return open ? 1 : 0;
+    return open || g_show_fps.load() ? 1 : 0;
 }
+
+// The frame counter: presents in the last half second, and the time between the last two.
+struct FpsCounter {
+    unsigned long long window_start = 0, last = 0;
+    unsigned frames = 0;
+    float fps = 0.0f, ms = 0.0f, worst_ms = 0.0f, window_worst = 0.0f;
+
+    void tick()
+    {
+        unsigned long long now = SDL_GetTicksNS();
+        if (last) {
+            float d = (float)((now - last) / 1e6);
+            ms = d;
+            if (d > window_worst) window_worst = d;
+        }
+        last = now;
+        if (!window_start) window_start = now;
+        frames++;
+        if (now - window_start >= 500000000ull) {
+            fps = frames * 1e9f / (float)(now - window_start);
+            worst_ms = window_worst;
+            window_start = now;
+            frames = 0;
+            window_worst = 0.0f;
+        }
+    }
+
+    // Top right, small, readable on any background.
+    void draw(ImDrawList *dl, const ImVec2 &display)
+    {
+        char text[48];
+        snprintf(text, sizeof text, "%.0f FPS  %.1f ms", fps, worst_ms);
+        float size = ImGui::GetFontSize() * 0.9f;
+        ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+        float pad = size * 0.35f;
+        ImVec2 pos(display.x - ts.x - pad * 3, pad * 2);
+        dl->AddRectFilled(ImVec2(pos.x - pad, pos.y - pad * 0.6f), ImVec2(pos.x + ts.x + pad, pos.y + ts.y + pad * 0.6f),
+                          IM_COL32(0, 0, 0, 150), pad);
+        ImU32 col = fps >= 58.0f ? IM_COL32(120, 230, 120, 255) : fps >= 45.0f ? IM_COL32(240, 200, 80, 255)
+                                                                  : IM_COL32(240, 90, 80, 255);
+        dl->AddText(ImGui::GetFont(), size, pos, col, text);
+    }
+};
+FpsCounter g_fps;
 
 void overlay_init_backend(const D3D8VkOverlayFrame *f)
 {
@@ -1219,13 +1381,29 @@ void overlay_init_backend(const D3D8VkOverlayFrame *f)
 void overlay_draw(const D3D8VkOverlayFrame *f, void *)
 {
     ui_lock();
-    if (!g_open.load()) { ui_unlock(); return; }
+    bool open = g_open.load(), fps = g_show_fps.load();
+    if (fps)
+        g_fps.tick();
+#if defined(__PROSPERO__)
+    if (g_guard_frames >= 0 && ++g_guard_frames >= 3) {
+        unlink(overlay_guard_path().c_str());          // two frames of it went through
+        g_guard_frames = -1;
+    }
+#endif
+    if (!open && !fps) { ui_unlock(); return; }
     if (g_ready && f->generation != g_vk_generation) {
         // The window's image has another format: the pipelines were built for the old pass.
         ImGui_ImplVulkan_Shutdown();
         overlay_init_backend(f);
     }
     if (!g_ready) {
+#if defined(__PROSPERO__)
+        if (FILE *g = fopen(overlay_guard_path().c_str(), "w")) {
+            fputs("The in-game menu was starting when the game stopped.\n", g);
+            fclose(g);
+            g_guard_frames = 0;
+        }
+#endif
         ui_context_begin(nullptr);
         g_last_frame_ns = 0;
         overlay_init_backend(f);
@@ -1241,13 +1419,23 @@ void overlay_draw(const D3D8VkOverlayFrame *f, void *)
         ui_set_extra_scale(h < 1.0f ? 1.0f : h > 2.4f ? 2.4f : h);
     }
     ui_apply_scale(nullptr);
-    ui_feed_gamepad();
+    if (open)
+        ui_feed_gamepad();
     ImGui_ImplVulkan_NewFrame();
     ui_sdl_frame((float)f->width, (float)f->height, 1.0f);
     ImGui::NewFrame();
+    ImGuiIO &io = ImGui::GetIO();
+    if (fps)
+        g_fps.draw(ImGui::GetForegroundDrawList(), io.DisplaySize);
+    if (!open) {
+        // The frame counter alone: nothing to navigate, nothing dimmed.
+        ImGui::Render();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), (VkCommandBuffer)f->command_buffer);
+        ui_unlock();
+        return;
+    }
 
     // Dim the game and put the settings in a panel in the middle (as the Direct3D overlay does).
-    ImGuiIO &io = ImGui::GetIO();
     if (g_just_opened) {
         g_just_opened = false;
         ImGui::SetNextWindowFocus();

@@ -823,7 +823,13 @@ static void *heartbeat_thread(void *unused)
     }
     if (profiling)
         ps5_prof_start();
-    ps5_gamewatch_start();
+    {
+        /* The input watch did its job (the help popups and pause menu work
+         * since the trigger fix): only when asked for (RECOMP_PS5_WATCH=1). */
+        const char *e = getenv("RECOMP_PS5_WATCH");
+        if (e && *e == '1')
+            ps5_gamewatch_start();
+    }
     if (pthread_create(&fl, NULL, flush_thread, NULL) == 0)
         pthread_detach(fl);
     for (;;) {

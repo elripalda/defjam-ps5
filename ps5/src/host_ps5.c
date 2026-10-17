@@ -452,6 +452,25 @@ static void early_fault_handler(void)
 static int (*s_game_main)(void);
 static int s_game_result;
 
+/* A line in the log now and then, so a black screen still says whether the
+ * game is moving (the guest's indirect-call count) or stuck. */
+extern volatile uint64_t g_icall_count;
+
+static void *heartbeat_thread(void *unused)
+{
+    unsigned secs = 0, step = 10;
+    (void)unused;
+    for (;;) {
+        sleep(step);
+        secs += step;
+        fprintf(stderr, "[PS5] still running after %u s, guest calls %llu\n",
+                secs, (unsigned long long)g_icall_count);
+        if (secs >= 120)
+            step = 60;
+    }
+    return NULL;
+}
+
 static void *game_thread(void *unused)
 {
     (void)unused;
@@ -514,6 +533,14 @@ int host_posix_run(int (*game_main)(void))
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
     pads_init();
+
+    /* One [PACING] line every two seconds while frames are being shown. */
+    setenv("RECOMP_PRESENT_PACING", "1", 0);
+    {
+        pthread_t hb;
+        if (pthread_create(&hb, NULL, heartbeat_thread, NULL) == 0)
+            pthread_detach(hb);
+    }
 
     s_game_main = game_main;
     pthread_attr_init(&attr);

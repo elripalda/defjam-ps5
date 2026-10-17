@@ -610,6 +610,9 @@ int pc_settings_init(void)
                 _putenv_s("RECOMP_TEXTURE_PACKS", playstation ? "playstation;custom" : "custom");
             if (!getenv("RECOMP_TEXTURE_CACHE_MB"))
                 _putenv_s("RECOMP_TEXTURE_CACHE_MB", "256");
+            /* For finding a picture's id: each big texture the game draws, once, in the log. */
+            if (!getenv("RECOMP_TEXTURE_LOG_SEEN"))
+                _putenv_s("RECOMP_TEXTURE_LOG_SEEN", "1");
             ps5_text_prepare(playstation);
         }
 #endif

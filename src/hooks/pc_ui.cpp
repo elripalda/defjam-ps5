@@ -836,7 +836,7 @@ static void page_general(UiMode)
         ImGui::EndPopup();
     }
     ImGui::SeparatorText("About");
-    ImGui::Text("Def Jam: Fight for NY - Recompiled, PS5 version %s", DEFJAM_VERSION);
+    ImGui::Text("Def Jam: Fight for NY Remastered, PS5 version %s", DEFJAM_VERSION);
     ImGui::TextDisabled("Dear ImGui %s (MIT)  -  SDL3 (zlib)  -  Roboto (Apache 2.0)", IMGUI_VERSION);
 }
 #else
@@ -982,7 +982,7 @@ namespace {
 std::atomic<bool> g_open(false);
 std::atomic<bool> g_toggle(false);
 std::atomic<bool> g_show_fps(false);    // [ui] show_fps: the frame counter, drawn even with the overlay closed
-std::atomic<bool> g_border_mode(false); // [display] widescreen_side_fill = border (drawn by the Vulkan overlay)
+std::atomic<int> g_side_mode(1);        // [display] widescreen_side_fill: 0 blur, 1 black, 2 border (the Vulkan overlay draws 0 and 2)
 bool g_just_opened = false;
 bool g_ready = false;               // the context and backends exist (under the lock)
 #if defined(_WIN32)
@@ -1072,7 +1072,7 @@ extern "C" void pc_ui_apply_settings(void)
     g_overlay_vk = vk > 0 ? vk : VK_F1;
     parse_chords();
     g_show_fps = recomp_settings_get("ui", "show_fps", 0) != 0;
-    g_border_mode = recomp_settings_get("display", "widescreen_side_fill", 0) == 2;
+    g_side_mode = recomp_settings_get("display", "widescreen_side_fill", 0);
     if (g_ready) ui_apply_scale(g_window);
     ui_unlock();
 }
@@ -1382,14 +1382,17 @@ void border_start_read()
 // Once a present: whether the border should show, and its fade. True while any of it is on screen.
 bool border_tick()
 {
-    if (!g_border_mode.load()) {
+    int mode = g_side_mode.load();
+    if (mode != 0 && mode != 2) {
         g_border.on = false;
         g_border.alpha = 0.0f;
         return false;
     }
-    int state = g_border.state.load();
-    if (state == 0) border_start_read();
-    if (state != 2) return false;
+    if (mode == 2) {                    // the border needs its picture; the blur needs nothing
+        int state = g_border.state.load();
+        if (state == 0) border_start_read();
+        if (state != 2) return false;
+    }
     bool was = g_border.on;
     float k = ws_k();
     if (!(k < 1.0f))
@@ -1399,12 +1402,56 @@ bool border_tick()
     else if (nv2a_ws_wide_frames() >= 2)
         g_border.on = false;
     if (g_border.on != was && g_border.changes++ < 40)
-        fprintf(stderr, "[UI] border %s\n", g_border.on ? "shown" : "hidden");
+        fprintf(stderr, "[UI] %s %s\n", mode == 2 ? "border" : "blurred sides", g_border.on ? "shown" : "hidden");
     // In over about a quarter of a second, out twice as fast so the game's own sides are not covered for long.
     g_border.alpha += g_border.on ? 1.0f / 15.0f : -1.0f / 7.0f;
     if (g_border.alpha < 0.0f) g_border.alpha = 0.0f;
     if (g_border.alpha > 1.0f) g_border.alpha = 1.0f;
+    if (mode == 0 && g_border.alpha > 0.0f)
+        d3d8_vk_request_side_blur();    // made in this present, handed to draw() as side_blur
     return g_border.alpha > 0.0f;
+}
+
+// The blurred picture as an ImGui texture (a descriptor set of the Vulkan backend).
+VkSampler g_blur_sampler = VK_NULL_HANDLE;
+VkDescriptorSet g_blur_set = VK_NULL_HANDLE;
+uint32_t g_blur_for_image = 0, g_blur_for_backend = 0;
+
+// The sides as the picture's own middle, stretched, blurred and darkened (a TV's ambient mode).
+void blur_draw(ImDrawList *dl, const D3D8VkOverlayFrame *f, int x0, int x1)
+{
+    if (!f->side_blur) return;
+    if (!g_blur_sampler) {
+        VkSamplerCreateInfo si = {};
+        si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.magFilter = si.minFilter = VK_FILTER_LINEAR;
+        si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.maxLod = 1.0f;
+        if (vkCreateSampler((VkDevice)f->device, &si, nullptr, &g_blur_sampler) != VK_SUCCESS) {
+            g_blur_sampler = VK_NULL_HANDLE;
+            return;
+        }
+    }
+    if (!g_blur_set || g_blur_for_image != f->side_blur_generation || g_blur_for_backend != g_vk_generation) {
+        if (g_blur_set && g_blur_for_backend == g_vk_generation) ImGui_ImplVulkan_RemoveTexture(g_blur_set);
+        g_blur_set = ImGui_ImplVulkan_AddTexture(g_blur_sampler, (VkImageView)f->side_blur,
+                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        g_blur_for_image = f->side_blur_generation;
+        g_blur_for_backend = g_vk_generation;
+        fprintf(stderr, "[UI] blurred sides ready\n");
+    }
+    if (!g_blur_set) return;
+    // The blurred middle spread over the whole picture; only what falls beside the box shows.
+    float px0 = (float)f->picture_x0, pw = (float)(f->picture_x1 - f->picture_x0), h = (float)f->height;
+    float w = (float)f->width;
+    int shade = 125;                    // about half as bright as the picture itself
+    ImU32 col = IM_COL32(shade, shade, shade, (int)(g_border.alpha * 255.0f + 0.5f));
+    ImTextureRef ref((ImTextureID)g_blur_set);
+    if (x0 > 0)
+        dl->AddImage(ref, ImVec2(0, 0), ImVec2((float)x0, h), ImVec2((0 - px0) / pw, 0), ImVec2((x0 - px0) / pw, 1), col);
+    if (x1 < (int)w)
+        dl->AddImage(ref, ImVec2((float)x1, 0), ImVec2(w, h), ImVec2((x1 - px0) / pw, 0), ImVec2((w - px0) / pw, 1), col);
 }
 
 // Cut the parts of the image that show beside the box (x0..x1 of a window w wide) into one texture.
@@ -1445,7 +1492,12 @@ void border_draw(ImDrawList *dl, const D3D8VkOverlayFrame *f)
     float pw = (float)(f->picture_x1 - f->picture_x0), cx = (f->picture_x0 + f->picture_x1) * 0.5f;
     int w = (int)f->width, h = (int)f->height;
     int x0 = (int)floorf(cx - pw * k * 0.5f + 0.5f), x1 = (int)floorf(cx + pw * k * 0.5f + 0.5f);
-    if (pw <= 0.0f || (x0 <= 0 && x1 >= w) || !border_make(x0, x1, w)) return;
+    if (pw <= 0.0f || (x0 <= 0 && x1 >= w)) return;
+    if (g_side_mode.load() == 0) {
+        blur_draw(dl, f, x0, x1);
+        return;
+    }
+    if (!border_make(x0, x1, w)) return;
     ImU32 col = IM_COL32(255, 255, 255, (int)(g_border.alpha * 255.0f + 0.5f));
     ImTextureRef ref = g_border.tex.GetTexRef();
     if (x0 > 0 && g_border.u_left > 0.0f)

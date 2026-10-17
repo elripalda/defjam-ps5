@@ -617,8 +617,8 @@ int pc_settings_init(void)
             extern void ps5_text_prepare(int playstation);
             int hd = recomp_settings_get("textures", "enabled", 1);
             if (!getenv("RECOMP_TEXTURE_PACKS")) {
-                /* Every folder in mods/ is a pack: playstation first, then the others (HD packs)
-                 * in name order, then custom, so the owner's own pictures win. */
+                /* Every folder in mods/ is a pack: the HD packs in name order, then playstation
+                 * (an HD pack holds the Xbox buttons too), then custom: the last one wins. */
                 char list[1024] = "", names[32][64], dir[MAX_PATH];
                 int n = 0, i, j;
                 DIR *d;
@@ -639,12 +639,11 @@ int pc_settings_init(void)
                         char t[64];
                         memcpy(t, names[j], sizeof t); memcpy(names[j], names[j - 1], sizeof t); memcpy(names[j - 1], t, sizeof t);
                     }
-                strcat(list, "playstation;");
                 for (i = 0; i < n; i++) {
                     strncat(list, names[i], sizeof list - strlen(list) - 2);
                     strcat(list, ";");
                 }
-                strcat(list, "custom");
+                strcat(list, "playstation;custom");     /* the buttons over any HD pack's Xbox ones */
                 _putenv_s("RECOMP_TEXTURE_PACKS", list);
                 fprintf(stderr, "[SETTINGS] texture packs: %s\n", list);
             }

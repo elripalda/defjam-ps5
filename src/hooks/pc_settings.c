@@ -647,7 +647,7 @@ int pc_settings_init(void)
                 fprintf(stderr, "[SETTINGS] texture packs: %s\n", list);
             }
             if (!getenv("RECOMP_TEXTURE_CACHE_MB"))
-                _putenv_s("RECOMP_TEXTURE_CACHE_MB", "512");
+                _putenv_s("RECOMP_TEXTURE_CACHE_MB", "2048");     /* the full HD pack thrashes 512 in a fight */
             if (!getenv("RECOMP_TEXT_SHARPEN"))
                 _putenv_s("RECOMP_TEXT_SHARPEN", recomp_settings_get("display", "sharp_text", 1) ? "4" : "0");
             ps5_text_prepare(1);

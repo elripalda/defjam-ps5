@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <time.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -418,6 +419,21 @@ int host_posix_run(int (*game_main)(void));
  * stderr's stream. */
 static int s_crash_fd = -1;
 
+static void ps5_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void ps5_logf(const char *fmt, ...)
+{
+    char buf[768];
+    va_list ap;
+    int n;
+    va_start(ap, fmt);
+    n = vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (n > (int)sizeof buf - 1)
+        n = (int)sizeof buf - 1;
+    if (s_crash_fd >= 0 && n > 0)
+        write(s_crash_fd, buf, (size_t)n);
+}
+
 static void early_fault(int sig, siginfo_t *si, void *uctx)
 {
     uintptr_t pc = mmio_trap_pc(uctx);
@@ -429,7 +445,7 @@ static void early_fault(int sig, siginfo_t *si, void *uctx)
                      (void *)pthread_self());
     if (s_crash_fd >= 0 && n > 0)
         write(s_crash_fd, msg, (size_t)n);
-    snprintf(msg, sizeof msg, "Def Jam crashed early (signal %d). Send logs/defjam.log.err.", sig);
+    snprintf(msg, sizeof msg, "Def Jam crashed early (signal %d). Send the logs folder.", sig);
     ps5_notify(msg);
     sleep(2);
     _exit(1);
@@ -616,14 +632,14 @@ static void sample_guest_threads(void)
                     found++;
                 }
             }
-            fprintf(stderr, "%s\n", line);
+            ps5_logf("%s\n", line);
             usleep(5000);
         }
     }
     {
         uintptr_t a[8], p[8];
         mmio_trap_last_faults(a, p);
-        fprintf(stderr, "[PS5]   traps %llu (neighbour pages %llu), last at"
+        ps5_logf("[PS5]   traps %llu (neighbour pages %llu), last at"
                 " %lx/%lx %lx/%lx %lx/%lx %lx/%lx\n",
                 (unsigned long long)mmio_trap_fault_count(),
                 (unsigned long long)mmio_trap_neighbour_count(),
@@ -632,30 +648,45 @@ static void sample_guest_threads(void)
     }
 }
 
+extern long long xbox_kernel_call_count(void);
+extern volatile unsigned g_vk_frames_presented;
+
+/* Pushes the buffered logs out once a second. On its own thread, so a stream
+ * stuck behind a lock cannot also silence the heartbeat. */
+static void *flush_thread(void *unused)
+{
+    (void)unused;
+    for (;;) {
+        sleep(1);
+        fflush(stdout);
+        fflush(stderr);
+    }
+    return NULL;
+}
+
 static void *heartbeat_thread(void *unused)
 {
     unsigned secs = 0, step = 5;
     struct sigaction sa;
+    pthread_t fl;
     (void)unused;
     memset(&sa, 0, sizeof sa);
     sa.sa_sigaction = sample_handler;
     sa.sa_flags = SA_SIGINFO | SA_RESTART;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGUSR1, &sa, NULL);
+    if (pthread_create(&fl, NULL, flush_thread, NULL) == 0)
+        pthread_detach(fl);
     for (;;) {
-        unsigned k;
-        for (k = 0; k < step; k++) {
-            sleep(1);
-            fflush(stdout);
-            fflush(stderr);
-        }
+        sleep(step);
         secs += step;
-        fprintf(stderr, "[PS5] still running after %u s, guest calls %llu, %d guest thread(s)\n",
-                secs, (unsigned long long)g_icall_count, (int)s_guest_thread_count);
-        if (secs <= 30)
+        ps5_logf("[PS5] %u s: kernel calls %lld, guest calls %llu, frames %u, %d guest thread(s)\n",
+                 secs, xbox_kernel_call_count(), (unsigned long long)g_icall_count,
+                 g_vk_frames_presented, (int)s_guest_thread_count);
+        if (secs <= 60 || secs % 60 == 0)
             sample_guest_threads();
-        if (secs >= 120)
-            step = 60;
+        if (secs >= 60)
+            step = 30;
     }
     return NULL;
 }
@@ -698,8 +729,11 @@ int host_posix_run(int (*game_main)(void))
     setvbuf(stderr, NULL, _IOFBF, 1 << 16);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
-    snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);
-    s_crash_fd = open(log, O_WRONLY | O_APPEND);
+    /* The heartbeat and early crash reports go to their own file, written
+     * straight to it: they still arrive if a thread is stuck holding the
+     * stderr stream. */
+    snprintf(log, sizeof log, "%s/logs/ps5.log", root);
+    s_crash_fd = open(log, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     early_fault_handler();
     fprintf(stderr, "[PS5] host_posix_run is at %p\n", (void *)&host_posix_run);
     {   /* The decoder for trapped device registers reads instructions from

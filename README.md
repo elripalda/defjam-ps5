@@ -45,7 +45,7 @@ Two packs, each a folder that goes in `/data/homebrew/PPSA92046/mods/`:
 | Pack | What it changes | Download |
 |---|---|---|
 | Faithful HD | Fighters, venues and crowds, upscaled 4x from the originals | *Coming soon* |
-| HD Menus | The menus and HUD, remastered with AI upscaling | *Coming soon* |
+| HD Menus | The menus and HUD, with upscaling | *Coming soon* |
 
 Turn them on under **Video › HD textures** and **Video › HD menus**. Both switch instantly, no restart needed.
 

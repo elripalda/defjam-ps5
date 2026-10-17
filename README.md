@@ -40,14 +40,28 @@ The easiest way to play is **[Recomp Store](https://recompstore.com)**. It insta
 To update, copy the new `PPSA92046` folder over the old one. Your saves, settings and `GameData` stay where they are.
 
 ## HD textures (optional)
-Two packs, each a folder that goes in `/data/homebrew/PPSA92046/mods/`:
+Two packs, downloaded separately:
 
 | Pack | What it changes | Download |
 |---|---|---|
-| Faithful HD | Fighters, venues and crowds, upscaled 4x from the originals | *Coming soon* |
+| Faithful HD | Fighters, venues and crowds, upscaled 4x from the originals | [Google Drive](https://drive.google.com/file/d/1peMSkiT_GaXe6k6TfbnxDvxJ8F3WaAtJ/view?usp=sharing) |
 | HD Menus | The menus and HUD, with upscaling | *Coming soon* |
 
-Turn them on under **Video › HD textures** and **Video › HD menus**. Both switch instantly, no restart needed.
+Unzip them and copy the folders into the app's `mods` folder:
+
+- **Faithful HD** has two folders, `faithful-hd-…-opacity` and `faithful-hd-…-channels`. Copy both.
+- **HD Menus** has one folder, `hd-menus`.
+
+```
+/data/homebrew/PPSA92046/mods/
+├── faithful-hd-…-channels/
+├── faithful-hd-…-opacity/
+├── hd-menus/
+├── playstation/    (comes with the app)
+└── custom/         (comes with the app)
+```
+
+Then turn them on under **Video › HD textures** and **Video › HD menus**. Both switch instantly, no restart needed.
 
 ## The in-game menu
 Hold **L3 + R3** (press both sticks in) at any time to open it.

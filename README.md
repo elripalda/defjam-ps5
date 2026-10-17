@@ -1,185 +1,85 @@
-<p align="center"><img src="branding/fan/github/social-preview-1280x640.jpg" width="960" alt="Def Jam: Fight for NY — Fan Recomp"></p>
+# Def Jam: Fight for NY REMASTERED for PS5
 
-# Def Jam: Fight for NY — Recompiled
+**Def Jam: Fight for NY (Xbox, 2004) running natively on a jailbroken PS5**, at 60 fps with up to 4x resolution, widescreen fights, PlayStation buttons and optional HD textures.
 
-[![CI](https://github.com/vyanhursky/DefJamFFNY-recomp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vyanhursky/DefJamFFNY-recomp/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/vyanhursky/DefJamFFNY-recomp)](https://github.com/vyanhursky/DefJamFFNY-recomp/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+> ### Built on DefJamFFNY-recomp by Vlad Yanhursky
+> This port exists because of **[DefJamFFNY-recomp](https://github.com/vyanhursky/DefJamFFNY-recomp)**, Vlad Yanhursky's native recompilation of Def Jam: Fight for NY for Windows, macOS and Linux. The recompiled game and its fixes, the Vulkan renderer, widescreen, the HD texture system and the settings all come from his work, and **[xboxrecomp](https://github.com/sp00nznet/xboxrecomp)** by sp00nz is the toolkit underneath it. This release takes that work to the PS5.
+>
+> All the credit and all the love goes to him. Go star the original project and support it.
 
-Bring **Def Jam: Fight for NY** to Windows, macOS and Linux, including the Steam Deck.
-This unofficial native port recompiles the original Xbox game for your computer,
-with higher rendering resolution, modern controller support, local multiplayer
-and optional HD textures.
+## Get it on Recomp Store
+The easiest way to play is **[Recomp Store](https://recompstore.com)**. It installs the app, helps you set up your own game files and keeps it up to date.
 
-**The port is playable and still improving.** Menus, fights and tested Story routes
-work, including the intro, character creator, crib and gym. See
-[known issues](docs/known-issues.md) and the
-[latest release notes](https://github.com/vyanhursky/DefJamFFNY-recomp/releases/latest)
-for current limitations.
+## What's in it
+- The original Xbox game recompiled to run natively on the PS5, at 60 fps
+- Up to 4x the original resolution, sent to the TV in 4K
+- 16:9 widescreen fights, with menus and movies kept in 4:3 between a choice of borders
+- PlayStation button prompts throughout the game
+- Optional HD texture packs for the fighters, venues, menus and HUD
+- Sharper menu text
+- Frame generation (beta): 120 fps on a 120 Hz TV
+- Up to four players on DualSense controllers, with button remapping
+- An in-game settings menu, and saves that carry over when you update
 
-You need **your own supported USA Xbox dump**. Setup checks your dump and builds
-the game on your machine. PS2 and GameCube copies cannot be used.
+## What you need
+- A jailbroken PS5 that runs homebrew apps from `/data/homebrew/`
+- Your **own** copy of Def Jam: Fight for NY for the **USA Xbox**. PS2 and GameCube versions won't work. No game files are included.
 
-**[Get the latest setup](https://github.com/vyanhursky/DefJamFFNY-recomp/releases/latest)** ·
-[Install guide](docs/setup-installer.md) · [Documentation](docs/README.md) ·
-[Report a problem](https://github.com/vyanhursky/DefJamFFNY-recomp/issues/new/choose)
+## Install by hand
+1. Download `PPSA92046.zip` from [Releases](../../releases) and copy the `PPSA92046` folder to `/data/homebrew/` on your PS5.
+2. Copy everything from your extracted disc into its `GameData` folder:
 
-## Gameplay
+```
+/data/homebrew/PPSA92046/GameData/default.xbe
+/data/homebrew/PPSA92046/GameData/*.xml
+/data/homebrew/PPSA92046/GameData/assets/ audio/ fonts/ motion/ movies/ screens/
+```
 
-![Blaze and Doc face-off: original 4:3 framing versus wider 16:9, with faithful HD textures on both sides](docs/media/widescreen-comparison.png)
+3. Launch it from your homebrew launcher.
 
-**4:3 versus 16:9 widescreen:** the same fight moment, with faithful HD textures
-and native macOS rendering at 2× scale. The wider view reveals more of the arena
-while keeping the fighters and HUD in proportion.
+To update, copy the new `PPSA92046` folder over the old one. Your saves, settings and `GameData` stay where they are.
 
-![Three-second fight preview showing strikes and a knockdown](docs/media/gameplay-preview-compact.gif)
+## HD textures (optional)
+Two packs, each a folder that goes in `/data/homebrew/PPSA92046/mods/`:
 
-Silent three-second preview exported at 20 fps; its cadence is not a game
-performance measurement. [Download the longer 60-fps MP4](docs/media/hd-16x9-gameplay.mp4).
-
-**[Compare 4:3 and widescreen, original and HD textures, and see the launcher and overlay](docs/media/README.md)**
-
-## Features
-
-- **Native across three platforms.** Windows x64 uses Direct3D 11; Apple Silicon
-  Macs and x86-64 Linux use Vulkan. Steam Deck runs the Linux version natively.
-- **60-fps gameplay.** The port targets 60 frames per second, with performance
-  depending on your hardware, chosen settings and the scene.
-- **Sharper rendering.** Choose 1×–4× internal resolution, a resizable window
-  or borderless full screen.
-- **Widescreen (beta), available now.** Since v0.9.0, Windows, macOS and
-  Linux/Steam Deck support wider 16:9 and 16:10 views. The 3D view widens while
-  the HUD and menus keep their shape; original 4:3 remains available.
-- **Optional HD textures.** Setup can generate faithful 4× texture packs locally
-  from your dump on Windows, macOS and Linux. Original textures remain available.
-- **Controllers and keyboard play.** Xbox, DualSense, Switch Pro and other
-  supported gamepads, with remapping, hot-plug and rumble. Keyboard and mouse
-  buttons can supply gameplay bindings; the launcher and settings support a pointer.
-- **Up to four local players.** Play with gamepads and a keyboard player.
-  Network multiplayer is not supported.
-- **Settings before and during play.** Use the launcher or open the overlay
-  with F1 or a configured controller shortcut. Changes are saved locally;
-  settings that require a restart are marked. The overlay does not pause the game.
-- **Local saves.** Profiles, settings and generated texture packs live in your
-  data folder, which setup preserves through updates and repairs.
-
-## Get started
-
-1. Have your own USA Xbox disc image or extracted dump matching the
-   [supported dump manifest](config/dump-manifest.json).
-2. Download the setup for your platform from the
-   [latest release](https://github.com/vyanhursky/DefJamFFNY-recomp/releases/latest).
-3. Choose your dump, install folder and data folder. Enable HD texture generation
-   if you want it, then let setup verify, recompile and build the game.
-4. Open the launcher, choose your display and input settings, and select **Play**.
-
-| Platform | Setup download | Guide |
+| Pack | What it changes | Download |
 |---|---|---|
-| Windows x64 | `DefJamSetup-<version>-windows-x64.exe` | [Windows setup](docs/setup-installer.md) |
-| macOS, Apple Silicon | `DefJamSetup-<version>-macos-arm64.dmg` | [macOS setup](docs/setup-installer.md#macos-setup-apple-silicon) |
-| Linux x86-64 / Steam Deck | `DefJamSetup-<version>-linux-x64.tar.gz` | [Linux setup](docs/setup-installer.md#linux-setup) |
+| Faithful HD | Fighters, venues and crowds, upscaled 4x from the originals | *Coming soon* |
+| HD Menus | The menus and HUD, remastered with AI upscaling | *Coming soon* |
 
-Setup builds from your dump rather than downloading a precompiled game.
-The [install guide](docs/setup-installer.md) covers platform requirements,
-unsigned-app prompts, disk space, updates and repairs. HD generation needs
-additional disk space and install time.
+Turn them on under **Video › HD textures** and **Video › HD menus**. Both switch instantly, no restart needed.
 
-Prefer a manual source build? Use [Build and play](docs/build-and-play.md) for
-Windows or [Build on macOS and Linux](docs/build-macos-linux.md).
+## The in-game menu
+Hold **L3 + R3** (press both sticks in) at any time to open it.
 
-## Customize your game
-
-Use the launcher or F1 overlay to change display settings, controls and texture
-packs. The same options are stored in `settings.ini` in your data folder.
-
-- [Launcher and overlay](docs/launcher-and-overlay.md)
-- [Controllers, keyboard and mouse](docs/10-input.md)
-- [Settings reference](docs/settings-reference.md)
-- [HD texture packs: generate, install and enable](docs/hd-textures.md)
-
-### Texture packs and mod support
-
-**Available now:** local texture replacement packs, including the faithful HD
-packs generated by setup. Packs can be enabled and ordered through the Textures
-page. The [texture guide](docs/hd-textures.md) describes formats, load order and
-supported resources.
-
-**Proposed:** broader data overrides and a curated mod list managed from the
-launcher, with downloads and updates handled by a separate helper. This is an
-[unscheduled design proposal](https://github.com/vyanhursky/DefJamFFNY-recomp/pull/17).
-New fighters, stages, music replacements and code/gameplay mods are not released
-modding capabilities.
-
-## Where the project is heading
-
-The project aims to preserve the original game's experience while making it
-easier to play and customize on modern computers.
-
-| Direction | Goal and current stage |
+| Button | Does |
 |---|---|
-| Engine optimizations | Improve performance on low-spec machines, stay up to date with [xboxrecomp](https://github.com/sp00nznet/xboxrecomp), and contribute improvements upstream. |
-| Port accuracy | Keep the visuals, tone and gameplay feel faithful to the original Xbox game. |
-| Fully unlocked frame rates | Support frame rates above 60 fps while preserving game speed, timing and gameplay feel. Future work; not supported by the current release. |
-| Widescreen refinement | Beta released in [v0.9.0](https://github.com/vyanhursky/DefJamFFNY-recomp/releases/tag/v0.9.0) on Windows, macOS and Linux/Steam Deck. Improve edge cases and broader aspect/venue coverage; 21:9 and 32:9 remain experimental. |
-| Broader mod support | Enable modified game modes, difficulty changes and restored cut content. The [mod-system design proposal](https://github.com/vyanhursky/DefJamFFNY-recomp/pull/17) is not scheduled; texture packs work today. |
-| Build and release automation | Improve automation and the gameplay test harness so shipping builds have reliable, repeatable validation. |
-| Deeper gameplay decompilation | Long-term stretch goal. |
+| L1 / R1 | Switch pages: Video, Controls, Buttons, Game |
+| Up / Down | Move between settings |
+| Left / Right | Change a setting |
+| Cross | Select |
+| Circle | Close the menu |
+| Triangle | Restart the game, when a change needs it |
 
-These stages describe current work, not promised release dates. See the
-[PC features plan](docs/07-m6-plan.md), [roadmap](docs/01-plan-review.md#corrected-roadmap-milestones-with-exit-criteria)
-and [improvement backlog](docs/04-improvement-backlog.md) for detail.
+The bottom of the menu explains whichever setting is highlighted. Most settings apply right away. The few that need a restart are listed at the bottom, and Triangle restarts the game for them.
 
-## Compatibility and known limits
+## Frame generation (beta)
+Frame generation adds a generated frame between every two real ones, so the game shows 120 fps on a TV that runs at 120 Hz. The TV switches to 120 Hz when you turn it on and back to 60 Hz when you turn it off. It adds a little input lag, so it's off by default.
 
-The released build targets Windows x64, Apple Silicon macOS and x86-64 Linux.
-Steam Deck has automated regression coverage and maintainer playtesting;
-Proton is untested. Performance varies with hardware, settings and scenes.
-Steam Deck audio distortion and Story tutorial performance remain under
-investigation.
+## Building from source
+The full source is in this repository. Build instructions are in [ps5/README.md](ps5/README.md). You need your own copy of the game to build it, and nothing from the game is stored here.
 
-Check both [known issues](docs/known-issues.md) and the
-[latest release notes](https://github.com/vyanhursky/DefJamFFNY-recomp/releases/latest).
-Some release-specific fixes and validation limits appear in the notes first.
+## Credits
+- **[Vlad Yanhursky](https://github.com/vyanhursky)**: [DefJamFFNY-recomp](https://github.com/vyanhursky/DefJamFFNY-recomp), the recompilation and everything it does, which this port is built on
+- **[sp00nz](https://github.com/sp00nznet)**: [xboxrecomp](https://github.com/sp00nznet/xboxrecomp), the Xbox static recompilation toolkit, with hardware work from the [xemu](https://github.com/xemu-project/xemu) project
+- **[elripalda](https://github.com/elripalda)**: the PS5 port, the in-game menu, the PlayStation buttons and the art
+- **[mihawk-99](https://github.com/mihawk-99)**: [MihawkGen](https://github.com/mihawk-99/PS5_MihawkGen), the frame generation, and [PS5_Mesa](https://github.com/mihawk-99/PS5_Mesa), the PS5 Vulkan driver
+- **[Nazky](https://github.com/Nazky)**: [ps5-plume-triangle](https://github.com/Nazky/ps5-plume-triangle), the PS5 Vulkan app setup this builds on
+- **[ps5-payload-dev](https://github.com/ps5-payload-dev)**: the PS5 payload SDK
+- [SDL3](https://github.com/libsdl-org/SDL), [Dear ImGui](https://github.com/ocornut/imgui), [glslang](https://github.com/KhronosGroup/glslang), [stb](https://github.com/nothings/stb), and the [Bebas Neue](https://fonts.google.com/specimen/Bebas+Neue) and [Oswald](https://fonts.google.com/specimen/Oswald) fonts
+- Thanks to everyone who played the test builds
 
-## Help improve the port
+## License
+The code from DefJamFFNY-recomp and this port is under the [MIT License](LICENSE). xboxrecomp keeps its own licenses (see [tools/xboxrecomp](tools/xboxrecomp)). MihawkGen is GPL-3.0, so the PS5 app, which includes it, is shared under GPL-3.0 with this source. None of these licenses cover the game or its artwork.
 
-[Report a problem](https://github.com/vyanhursky/DefJamFFNY-recomp/issues/new/choose)
-with your version, operating system, CPU/GPU, controller, reproduction steps and
-relevant log lines. Remove personal paths and keep game files, saves and memory
-dumps out of reports. See [Contributing](CONTRIBUTING.md) for reporting guidance,
-development setup and the tests a change needs.
-
-Bug fixes, platform testing and documentation improvements are welcome.
-The [gameplay test harness](docs/09-testing-harness.md) explains automated game
-checks and their limits. GitHub CI also runs checks that need no game data;
-a passing CI badge does not establish full campaign compatibility.
-
-## How it works
-
-The [xboxrecomp](https://github.com/sp00nznet/xboxrecomp) toolchain translates the
-Xbox executable into C, which is compiled ahead of time. The game's code runs
-through an Xbox compatibility runtime, with graphics, audio and input supplied
-by your computer. This is a static recompilation port; deeper gameplay
-decompilation remains future work.
-
-The repository distributes maintained port code, build tools and documentation.
-It does not distribute a disc image, playable game data, translated game source
-or a compiled game executable. The repository does include selected approved
-screenshots and branding artwork; those retain their original ownership.
-
-## Credits and licensing
-
-Maintained by **vyanhursky**, with development assistance from Claude Code and
-Codex. Built on **sp00nz's xboxrecomp** and work from the Xbox emulation
-community, including xemu hardware references and attributed toolkit components.
-[Burnout 3](https://github.com/sp00nznet/burnout3) and
-[Mercenaries Recompiled](https://github.com/KraftMacAndChee/Mercenaries-Recompiled)
-are related projects that helped shape the documentation.
-
-The project's code is [MIT licensed](LICENSE). Toolkit components retain their
-own licenses; see the [toolkit NOTICE](https://github.com/vyanhursky/xboxrecomp/blob/4bff2573127c5499ad795d58ddd90159240520bd/NOTICE)
-and [license texts](https://github.com/vyanhursky/xboxrecomp/tree/4bff2573127c5499ad795d58ddd90159240520bd/LICENSES).
-The license grants no rights to the game or its artwork.
-
-This is an unofficial fan project, not affiliated with Electronic Arts, AKI or
-Def Jam. Def Jam: Fight for NY and its assets belong to their respective owners.
+*An unofficial fan project, not affiliated with or endorsed by Electronic Arts, AKI, Def Jam Recordings, Microsoft or Sony. No game files are included.*

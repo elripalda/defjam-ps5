@@ -127,7 +127,7 @@ if(DEFJAM_BUILD_GAME)
         # this link only has to produce the list of inputs.
         target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp recomp_settings defjam_imgui
                               SDL3::SDL3 Vulkan::Vulkan SceUserService ScePad SceSystemService
-                              SceAudioOut pthread m)
+                              SceAudioOut ps5platform pthread m)
         target_compile_options(${PROJECT_NAME} PRIVATE -fno-strict-aliasing -fwrapv -ffp-contract=off)
     else()
         # One SDL for the window, the sound and the pads: SDL3, the system's.

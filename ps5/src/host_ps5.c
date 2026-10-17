@@ -451,62 +451,9 @@ static void early_fault_handler(void)
 
 /* ── Start-up ──────────────────────────────────────────────────────────── */
 
-/* A write to a file in the app folder takes the console a long time (the
- * game thread sat in it for most of every second, one log line at a time).
- * stdout and stderr go into pipes instead, and one thread per log moves the
- * text to the file in large pieces. */
-struct log_pump { int in, out; char chunk[65536]; };
-
-static void *log_pump_thread(void *arg)
-{
-    struct log_pump *lp = arg;
-    char *chunk = lp->chunk;
-    for (;;) {
-        ssize_t n = read(lp->in, chunk, sizeof lp->chunk);
-        if (n > 0) {
-            ssize_t off = 0;
-            while (off < n) {
-                ssize_t w = write(lp->out, chunk + off, (size_t)(n - off));
-                if (w <= 0)
-                    break;
-                off += w;
-            }
-        } else if (n == 0) {
-            break;
-        } else {
-            usleep(1000);
-        }
-    }
-    return NULL;
-}
-
 static int log_to_file(const char *path, FILE *f)
 {
-    static struct log_pump pumps[2];
-    static int used;
-    int out, p[2], fd;
-    pthread_t th;
-
-    if (!freopen(path, "w", f))
-        return -1;
-    fd = fileno(f);
-    out = open(path, O_WRONLY);
-    if (out < 0 || fd < 0 || used >= 2 || pipe(p) != 0) {
-        if (out >= 0)
-            close(out);
-        return 0;               /* writes go to the file directly, as before */
-    }
-    pumps[used].in = p[0];
-    pumps[used].out = out;
-    if (pthread_create(&th, NULL, log_pump_thread, &pumps[used]) != 0) {
-        close(p[0]); close(p[1]); close(out);
-        return 0;
-    }
-    used++;
-    pthread_detach(th);
-    dup2(p[1], fd);
-    close(p[1]);
-    return 0;
+    return freopen(path, "w", f) ? 0 : -1;
 }
 
 /* How long the basic things the runtime leans on take here, once at start. */
@@ -522,7 +469,7 @@ static void ps5_time_basics(void)
     struct timespec a, b, c;
     pthread_key_t key;
     pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
-    double w_err, gettime, yield, spec, tls, mtx, slp;
+    double w_err, flush, gettime, yield, spec, tls, mtx, slp;
     int i;
 
     clock_gettime(CLOCK_MONOTONIC, &a);
@@ -530,6 +477,13 @@ static void ps5_time_basics(void)
         fprintf(stderr, "[PS5] timing line %d\n", i);
     clock_gettime(CLOCK_MONOTONIC, &b);
     w_err = bench_us(a, b, 20);
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 5; i++) {
+        fprintf(stderr, "[PS5] timing flush %d\n", i);
+        fflush(stderr);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    flush = bench_us(a, b, 5);
 
     clock_gettime(CLOCK_MONOTONIC, &a);
     for (i = 0; i < 1000; i++)
@@ -571,9 +525,9 @@ static void ps5_time_basics(void)
     clock_gettime(CLOCK_MONOTONIC, &b);
     slp = bench_us(a, b, 10);
 
-    fprintf(stderr, "[PS5] timing (us each): log line %.1f, clock %.3f, yield %.1f,"
+    fprintf(stderr, "[PS5] timing (us each): log line %.1f, flushed line %.1f, clock %.3f, yield %.1f,"
             " getspecific %.3f, thread-local %.4f, mutex %.3f, usleep(1) %.1f\n",
-            w_err, gettime, yield, spec, tls, mtx, slp);
+            w_err, flush, gettime, yield, spec, tls, mtx, slp);
 }
 
 static int (*s_game_main)(void);
@@ -611,10 +565,14 @@ static void sample_handler(int sig, siginfo_t *si, void *uctx)
     /* rsp: slot 23. A system call stub is a leaf; its caller is on top. */
     {
         const uint64_t *sp = (const uint64_t *)((uint64_t *)((uint8_t *)uctx + 64))[23];
-        int i;
+        /* Only as far as the end of the 16 KB page rsp is in: the top of a
+         * thread's stack can be the end of its mapping. */
+        int i, n = (int)((0x4000 - ((uintptr_t)sp & 0x3FFF)) / 8);
+        if (n > SAMPLE_STACK_WORDS)
+            n = SAMPLE_STACK_WORDS;
         s_sample_ret = sp[0];
         for (i = 0; i < SAMPLE_STACK_WORDS; i++)
-            s_sample_stack[i] = sp[i];
+            s_sample_stack[i] = i < n ? sp[i] : 0;
     }
     __atomic_add_fetch(&s_sample_seq, 1, __ATOMIC_SEQ_CST);
 }
@@ -685,11 +643,16 @@ static void *heartbeat_thread(void *unused)
     sigemptyset(&sa.sa_mask);
     sigaction(SIGUSR1, &sa, NULL);
     for (;;) {
-        sleep(step);
+        unsigned k;
+        for (k = 0; k < step; k++) {
+            sleep(1);
+            fflush(stdout);
+            fflush(stderr);
+        }
         secs += step;
         fprintf(stderr, "[PS5] still running after %u s, guest calls %llu, %d guest thread(s)\n",
                 secs, (unsigned long long)g_icall_count, (int)s_guest_thread_count);
-        if (secs <= 60)
+        if (secs <= 30)
             sample_guest_threads();
         if (secs >= 120)
             step = 60;
@@ -731,8 +694,8 @@ int host_posix_run(int (*game_main)(void))
         ps5_notify("Def Jam can't write its log (logs folder in the app folder)");
     snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);
     log_to_file(log, stderr);
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IOFBF, 1 << 16);
+    setvbuf(stderr, NULL, _IOFBF, 1 << 16);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
     snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);

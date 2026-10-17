@@ -786,8 +786,14 @@ static int host_main(void)
         char user_data_utf8[1024];
 
         if (data && *data) {
+#if defined(__PROSPERO__)
+            /* [ps5 port] Outside the app folder (ps5/src/host_ps5.c). */
+            extern const char *ps5_save_dir(void);
+            snprintf(save, sizeof(save), "%s", ps5_save_dir());
+#else
             snprintf(save, sizeof(save), "%s%ssave", data,
                      data[strlen(data) - 1] == HOST_SEP_CHAR ? "" : HOST_SEP);
+#endif
             xbox_path_init(YOUR_GAME_DIR, save);
         } else {
             xbox_path_init(YOUR_GAME_DIR, NULL);

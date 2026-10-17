@@ -633,6 +633,86 @@ static void open_up_tree(const char *dir, int depth)
     closedir(d);
 }
 
+/* ── Saves ───────────────────────────────────────────────────────────────
+ * Saves live outside the app, in /data/DefJamFFNY/save, so deleting or
+ * replacing the app folder never takes them (DEFJAM_SAVE overrides it). The
+ * first start of a build that does this copies the old <app>/save across and
+ * leaves the original where it was. */
+#define SAVE_HOME "/data/DefJamFFNY"
+
+static int copy_file(const char *from, const char *to)
+{
+    char buf[65536];
+    ssize_t n = 0;
+    int in = open(from, O_RDONLY), out, bad = 0;
+    if (in < 0)
+        return -1;
+    out = open(to, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (out < 0) {
+        close(in);
+        return -1;
+    }
+    while ((n = read(in, buf, sizeof buf)) > 0)
+        if (write(out, buf, (size_t)n) != n) { bad = 1; break; }
+    if (n < 0) bad = 1;
+    close(in);
+    if (close(out) != 0) bad = 1;
+    return bad ? -1 : 0;
+}
+
+static int copy_tree(const char *from, const char *to, int depth)
+{
+    DIR *d;
+    struct dirent *e;
+    char a[768], b[768];
+    int bad = 0;
+    if (depth > 8 || !(d = opendir(from)))
+        return -1;
+    mkdir(to, 0777);
+    while ((e = readdir(d)) != NULL) {
+        struct stat st;
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+            continue;
+        snprintf(a, sizeof a, "%s/%s", from, e->d_name);
+        snprintf(b, sizeof b, "%s/%s", to, e->d_name);
+        if (lstat(a, &st) != 0) { bad = 1; continue; }
+        if (S_ISDIR(st.st_mode)) { if (copy_tree(a, b, depth + 1)) bad = 1; }
+        else if (S_ISREG(st.st_mode) && copy_file(a, b)) bad = 1;
+    }
+    closedir(d);
+    return bad ? -1 : 0;
+}
+
+const char *ps5_save_dir(void)
+{
+    static char dir[512];
+    char old[512], part[560];
+    struct stat st;
+    const char *env = getenv("DEFJAM_SAVE");
+    if (dir[0])
+        return dir;
+    if (env && *env) {
+        snprintf(dir, sizeof dir, "%s", env);
+        return dir;
+    }
+    snprintf(dir, sizeof dir, SAVE_HOME "/save");
+    snprintf(old, sizeof old, "%s/save", ps5_root());
+    if (stat(dir, &st) == 0 || stat(old, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        mkdir(SAVE_HOME, 0777);
+        return dir;                              /* already moved, or nothing to move */
+    }
+    mkdir(SAVE_HOME, 0777);
+    snprintf(part, sizeof part, "%s.copying", dir);
+    if (copy_tree(old, part, 0) == 0 && rename(part, dir) == 0) {
+        fprintf(stderr, "[PS5] saves moved to %s (the old copy stays in %s)\n", dir, old);
+    } else {
+        /* Keep playing on the old folder rather than start from nothing. */
+        fprintf(stderr, "[PS5] could not copy the saves to %s; still using %s\n", dir, old);
+        snprintf(dir, sizeof dir, "%s", old);
+    }
+    return dir;
+}
+
 static void open_up_app_files(void)
 {
     const char *subs[] = { "save", "logs", "radv-shader-cache" };
@@ -642,6 +722,7 @@ static void open_up_app_files(void)
         snprintf(path, sizeof path, "%s/%s", ps5_root(), subs[i]);
         open_up_tree(path, 0);
     }
+    open_up_tree(SAVE_HOME, 0);
 }
 
 /* How long the basic things the runtime leans on take here, once at start. */

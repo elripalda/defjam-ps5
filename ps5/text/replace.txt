@@ -1,0 +1,20 @@
+// Text changes for the game, read each time it starts.
+//
+// One change per line:   old text => new text
+// The old text has to match exactly (capitals count). Changes run top to bottom.
+// In the game's text, # starts a new line. Lines starting with // are notes.
+//
+// [always] changes are always made. [playstation] changes are made when the
+// button style is PlayStation (the in-game menu, L3+R3: General).
+
+[always]
+// The line under the copyright on the title screen.
+Developed by AKI Corporation. => Developed by AKI Corporation.#PS5 port by elripalda
+
+[playstation]
+the hard disk is being accessed => the game is saving or loading
+the controller to controller port => controller
+Xbox console => PS5 console
+Xbox => PS5
+Press START => Press OPTIONS
+press START => press OPTIONS

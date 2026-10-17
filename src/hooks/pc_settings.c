@@ -39,6 +39,9 @@ static const char *const k_filter[] = { "smooth", "sharp", NULL };
 static const char *const k_ws_hud[] = { "auto", "edges", "centered", NULL };
 static const char *const k_ws_cutscenes[] = { "authored", "fill", NULL };
 static const char *const k_ws_fill[] = { "blur", "black", "border", NULL };
+#if defined(__PROSPERO__)
+static const char *const k_button_style[] = { "playstation", "original", NULL };
+#endif
 
 /* A four-fighter match holds about 2 GiB of replacements. At 512 MiB the cache evicted and
  * re-decoded dozens of textures every two seconds in a fight on the Steam Deck. */
@@ -99,6 +102,9 @@ static RecompSetting g_display_settings[] = {
       "Send 3840x2160 to the TV when it takes it; off, or a TV without it, gets 1920x1080." },
     { "ps5", "defaults", RECOMP_SETTING_INT, 0, 0, 1000, NULL, NULL, 0,
       "Which set of console defaults this file has been brought up to. Leave it as it is." },
+    { "ui", "button_style", RECOMP_SETTING_ENUM, 0, 0, 0, k_button_style, NULL, RECOMP_SETTING_RESTART,
+      "PlayStation: the game's button pictures show Cross, Circle, Square, Triangle, L2 and R2, and its text says "
+      "PS5 and OPTIONS. Original: the Xbox buttons and text, as the game shipped." },
 #endif
 };
 #define DISPLAY_SETTING_COUNT (sizeof(g_display_settings) / sizeof(g_display_settings[0]))
@@ -594,6 +600,19 @@ int pc_settings_init(void)
 
     {
         char value[MAX_PATH*2], packs[RECOMP_SETTING_TEXT_MAX];
+#if defined(__PROSPERO__)
+        {
+            /* [ps5 port] The app's own packs, in mods/: PlayStation buttons (unless the original style is
+             * chosen) and the owner's art in custom/, listed last so it wins. Then the text (ps5_text.c). */
+            extern void ps5_text_prepare(int playstation);
+            int playstation = recomp_settings_get("ui", "button_style", 0) == 0;
+            if (!getenv("RECOMP_TEXTURE_PACKS"))
+                _putenv_s("RECOMP_TEXTURE_PACKS", playstation ? "playstation;custom" : "custom");
+            if (!getenv("RECOMP_TEXTURE_CACHE_MB"))
+                _putenv_s("RECOMP_TEXTURE_CACHE_MB", "256");
+            ps5_text_prepare(playstation);
+        }
+#endif
         if (!getenv("RECOMP_TEXTURE_PACKS")) {
             recomp_settings_get_text("textures","packs",packs,sizeof packs,"faithful-hd");
             _putenv_s("RECOMP_TEXTURE_PACKS",recomp_settings_get("textures","enabled",0) ? packs : "");

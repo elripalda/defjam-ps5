@@ -138,6 +138,7 @@ static const char *friendly(const char *section, const char *key)
         { "debug", "unlock_all", "Debug - Unlock all Fighters and Venues (Requires Restart)" },
         { "ui", "overlay_pad", "Overlay pad buttons" }, { "ui", "overlay_key", "Overlay key" },
         { "display", "output_4k", "4K output" }, { "ui", "show_fps", "Frame counter" },
+        { "ui", "button_style", "Button style" },
     };
     for (const Label &l : labels)
         if (!strcmp(l.section, section) && !strcmp(l.key, key)) return l.text;
@@ -805,6 +806,10 @@ static void page_general(UiMode)
                            "also closes it. While it is open the game sees no input and keeps running.");
     }
     settings_group("ui", { "scale" });
+    ImGui::SeparatorText("Buttons and text");
+    settings_group("ui", { "button_style" });
+    ImGui::TextWrapped("Applies the next time the game starts. Your own pictures go in mods/custom and the text "
+                       "changes are in text/replace.txt, both in the game's folder.");
     ImGui::SeparatorText("Debug");
     settings_group("debug", { "unlock_all" });
     ImGui::TextWrapped("For testing: every fighter and venue is available on any profile. It changes the profile in memory "

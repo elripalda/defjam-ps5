@@ -164,6 +164,13 @@ Turn it off in the in-game menu (L3+R3): Display, "Beside 4:3 pictures",
 set to black.
 TXT
 fi
+# PlayStation buttons (drawn by ps5/tools/make_ps_buttons.py), the owner's own art (mods/custom) and
+# the text changes (text/replace.txt): src/hooks/pc_settings.c turns them on.
+mkdir -p "$app/mods/custom" "$app/text"
+python3 "$port/ps5/tools/make_ps_buttons.py" "$app/mods/playstation" \
+    || echo "warning: could not draw the PlayStation buttons (needs Pillow)" >&2
+cp "$port/ps5/mods/custom/manifest.ini" "$port/ps5/mods/custom/README.txt" "$app/mods/custom/"
+cp "$port/ps5/text/replace.txt" "$app/text/"
 mkdir -p "$app/GameData"
 cat > "$app/GameData/PUT GAME FILES HERE.txt" <<'TXT'
 Copy everything from your extracted Def Jam: Fight for NY (USA) Xbox disc into

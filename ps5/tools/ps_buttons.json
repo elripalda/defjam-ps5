@@ -1,0 +1,589 @@
+[
+ {
+  "id": "cad8d51e92373bb1094c9e344439fcb376ee5d827edb10cdd2b298b9d297f581",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   10.94,
+   10.9,
+   9.22
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    22,
+    7,
+    32,
+    15,
+    0.0
+   ],
+   [
+    7,
+    22,
+    15,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "a6f00bf37b1da4edb1e1fe05cfaa4e0906e2860c0ce2bb233e2f482a5500e911",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   10.96,
+   10.96,
+   10.06
+  ],
+  "ring": "light",
+  "bars": []
+ },
+ {
+  "id": "e7af16a441fd5836750dc1861b0b214744d6d8dc22e8da2de8db7ff6c7c846b3",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   11.0,
+   10.99,
+   9.25
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    22,
+    7,
+    32,
+    15,
+    0.0
+   ],
+   [
+    7,
+    22,
+    15,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "3d0fea3d3607b535a3c16882725b49fa39950a605b4edcc000fb07ca8b3493e7",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   10.96,
+   10.96,
+   10.06
+  ],
+  "ring": "light",
+  "bars": []
+ },
+ {
+  "id": "a3c55cdd04588e9c5c0300c472d78a342ef7f2afb4c4993d1dfcb1f30b4675e8",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "Y",
+  "disc": [
+   10.78,
+   10.78,
+   9.42
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    22,
+    7,
+    32,
+    15,
+    0.0
+   ],
+   [
+    7,
+    22,
+    15,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "7a1bec055d7b8614035244c9ab6ff31146d29bb8a0e4c1a9208eac667036465d",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "Y",
+  "disc": [
+   11.17,
+   10.99,
+   9.82
+  ],
+  "ring": "light",
+  "bars": []
+ },
+ {
+  "id": "a011f3cce046b27bb6b07b5c33862a117a60106074253ed9252bbb4e5a4b0e7c",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "X",
+  "disc": [
+   10.74,
+   10.89,
+   9.47
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    22,
+    7,
+    32,
+    15,
+    0.0
+   ],
+   [
+    7,
+    22,
+    15,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "e7f283fca59825a10825a5327ef4f561b1619fad6dde7261f901bc34b185b1a1",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "X",
+  "disc": [
+   10.96,
+   10.96,
+   10.06
+  ],
+  "ring": "light",
+  "bars": []
+ },
+ {
+  "id": "0e907085ba4fc42ef9601d799f032dbe821931361abfa3cb6b14d9f8d2dbb523",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   14.92,
+   12.81,
+   10.63
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "1961da00765acb086ecbd708930045bea443b1fa81d617ac1bc4e94ab2d2bd92",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   14.93,
+   12.93,
+   11.83
+  ],
+  "ring": "light",
+  "bars": []
+ },
+ {
+  "id": "25868891728f78d60ca6c6115e84fa830461168bd924790f507a8daf1a2796ca",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   14.43,
+   13.54,
+   8.23
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "edab23f2ae97ea19acc04f90af01f389b0c9484310e7e50e0bd32fbd2f504efe",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   14.5,
+   13.5,
+   9.39
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "aec0eb66885a1b56419ed240ccd83d0f46ac231cb7848641f40eb9392c3e2834",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   8.49,
+   8.54,
+   7.61
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    18,
+    5,
+    32,
+    12,
+    0.0
+   ],
+   [
+    5,
+    18,
+    12,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "c8eec20309068ea5ae84fde63e787340b0e4c5c5293b95a6450ea1caae82657d",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   10.31,
+   8.97,
+   7.96
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    7,
+    19,
+    14,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "acdaf0ef16acd0210f53ab27d33fb1ed6c004aaec99477c86d9ca1dfcdf9bb04",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   11.0,
+   11.0,
+   10.16
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "9d2a17afc197d4587636a76b828c1081d99ba0e7da82fc01e3b5a7eb02997243",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   14.93,
+   12.93,
+   11.83
+  ],
+  "ring": "light",
+  "bars": []
+ },
+ {
+  "id": "25cf0c821625028defdd8d293b8b3320a9b91a4b9eaf20efb3652a7088a80001",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   8.49,
+   8.54,
+   7.61
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    18,
+    5,
+    32,
+    12,
+    0.0
+   ],
+   [
+    5,
+    18,
+    12,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "4db58734d7b587cd39e5ef12b3d5cc3bc2d20fe2369132fdc32cd05c2fa65970",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   10.31,
+   8.97,
+   7.96
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    7,
+    19,
+    14,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "0515d15cf67d0f2d38f98834c86687af0286824d938280e615b03d5581a472a9",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   15.0,
+   14.01,
+   13.33
+  ],
+  "ring": "light",
+  "bars": [
+   [
+    11,
+    29,
+    19,
+    32,
+    0.98
+   ]
+  ]
+ },
+ {
+  "id": "0f2fec88cc5c57057c1b0d3d61a8e3154b06afb24696083662ce5e8d0bba5764",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   14.5,
+   13.5,
+   10.42
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "769c24a988c191ecf8980f522efa94781642dd8b793cd33b3cfc1f557fbc6a00",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "X",
+  "disc": [
+   8.32,
+   8.4,
+   7.84
+  ],
+  "ring": "dark",
+  "bars": [
+   [
+    18,
+    5,
+    32,
+    12,
+    0.0
+   ],
+   [
+    5,
+    18,
+    12,
+    32,
+    0.0
+   ]
+  ]
+ },
+ {
+  "id": "55b815039607d2d45011dc29fa824346336a4770b4f185797ca748840ebf7885",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   10.88,
+   10.86,
+   9.08
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "02c9f5b3670a5ce594f513325b578a40ed1c6f7d9caf2cc1104d9fd923ec6067",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   10.96,
+   10.95,
+   8.99
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "b868ebc82b0c1ed9f6312dd4f1162d299d0376ec05dc9af33869cc5ebe7928a0",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "X",
+  "disc": [
+   10.51,
+   10.66,
+   9.69
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "5969558c240252d4cb3de267909b426cacd85d420b0ff9cf1576e0d62b96374f",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "Y",
+  "disc": [
+   10.82,
+   10.48,
+   9.47
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "997be07d14b1cc206ff0556c5ab550a5fb9e08eae298879aad8f892d7263e136",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "A",
+  "disc": [
+   12.94,
+   12.94,
+   9.3
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "01d2b0c96d09ab421ad9c128a53921567b25afed50d4e8b0f6cc473a21dd93ea",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "B",
+  "disc": [
+   13.0,
+   13.0,
+   9.37
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "535efa863b9a85e5ab2eb6710614f45e9adabe9f9ad04ac73a5a3481ee7d453d",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "X",
+  "disc": [
+   13.0,
+   13.0,
+   9.37
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "75d1b2f12ea5e3c9a1d74b3ac5c6faebee7e0ed23039abeba25c3f02b0014e5f",
+  "w": 32,
+  "h": 32,
+  "kind": "face",
+  "button": "Y",
+  "disc": [
+   13.0,
+   13.0,
+   9.37
+  ],
+  "ring": "dark",
+  "bars": []
+ },
+ {
+  "id": "c311e02be8935bce845adb4f323d0293b65d98921c51fac1ca6d5322af5b51f4",
+  "w": 32,
+  "h": 32,
+  "kind": "shoulder",
+  "label": "L2",
+  "box": [
+   3,
+   3,
+   23,
+   22
+  ]
+ },
+ {
+  "id": "dcd91b3859b5f531d2f3141eb1f69d4578e6659dcb7cba53966a8e1c56515dcf",
+  "w": 32,
+  "h": 32,
+  "kind": "shoulder",
+  "label": "R2",
+  "box": [
+   3,
+   3,
+   23,
+   22
+  ]
+ },
+ {
+  "id": "7153c4d4b39e49c312b7952676c26e5d24143e0b072579ee9eb27c31f78dc944",
+  "w": 32,
+  "h": 32,
+  "kind": "shoulder",
+  "label": "L2",
+  "box": [
+   3,
+   3,
+   23,
+   22
+  ]
+ },
+ {
+  "id": "73a0d524bc1e5e292b80d11b0b85a518f123f6f9ba55538c496197c6246650a3",
+  "w": 32,
+  "h": 32,
+  "kind": "shoulder",
+  "label": "R2",
+  "box": [
+   3,
+   3,
+   23,
+   22
+  ]
+ }
+]

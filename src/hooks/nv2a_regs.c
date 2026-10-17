@@ -291,7 +291,11 @@ int nv2a_regs_handle_mmio(void *ctx, uint32_t xbox_va)
         }
     }
     if (!ok && p->undecoded++ < 10) {
+#if defined(_WIN32)
         const uint8_t *ip = (const uint8_t *)(uintptr_t)HOST_PC(ctx);
+#else
+        const uint8_t *ip = mmio_trap_code((uintptr_t)HOST_PC(ctx));
+#endif
         fprintf(stderr, "  [%s] undecoded access at +0x%03X: "
                         "%02X %02X %02X %02X %02X %02X\n",
                 p->name, xbox_va - p->base, ip[0], ip[1], ip[2], ip[3], ip[4], ip[5]);

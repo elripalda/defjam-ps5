@@ -120,7 +120,11 @@ int ac97_bm_handle_mmio(void *ctx, uint32_t xbox_va)
         return 0;
     ok = mmio_emulate((PCONTEXT)ctx, xbox_va - p->base, p, ac97_read, ac97_write);
     if (!ok && p->undecoded++ < 10) {
+#if defined(_WIN32)
         const uint8_t *ip = (const uint8_t *)(uintptr_t)HOST_PC(ctx);
+#else
+        const uint8_t *ip = mmio_trap_code((uintptr_t)HOST_PC(ctx));
+#endif
         fprintf(stderr, "  [AC97] undecoded access at +0x%03X: "
                         "%02X %02X %02X %02X %02X %02X\n",
                 xbox_va - p->base, ip[0], ip[1], ip[2], ip[3], ip[4], ip[5]);

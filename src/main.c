@@ -539,7 +539,7 @@ static void fault_handler(int sig, siginfo_t *si, void *ctx)
     else
         fprintf(stderr, "  The fault address is outside guest memory\n");
     {
-        const uint32_t *ip = (const uint32_t *)(uintptr_t)HOST_PC(ctx);
+        const uint32_t *ip = (const uint32_t *)mmio_trap_code((uintptr_t)HOST_PC(ctx));
         Dl_info info;
         /* Only read the instruction if the address is inside a loaded image. */
         if (dladdr(ip, &info) && info.dli_fname)

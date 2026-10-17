@@ -21,6 +21,7 @@
 #include <vulkan/vulkan.h>
 
 #include "d3d8_vk.h"
+#include "mmio_trap.h"
 #include "hooks/pc_settings.h"
 
 /* The app's own folder as the app sees it (the same folder as
@@ -442,6 +443,14 @@ int host_posix_run(int (*game_main)(void))
     freopen(log, "w", stderr);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
+    {   /* The decoder for trapped device registers reads instructions from
+         * this copy: code itself is execute-only here (mmio_trap.h). */
+        char code[300];
+        snprintf(code, sizeof code, "%s/code.bin", root);
+        if (mmio_trap_load_code(code) != 0)
+            ps5_fatal("Def Jam: code.bin is missing from the app folder. Copy the whole PPSA92004 folder again.");
+        fprintf(stderr, "[PS5] code copy loaded from %s\n", code);
+    }
     if (stat(ps5_game_xbe(), &st) != 0) {
         char msg[400];
         snprintf(msg, sizeof msg, "Def Jam: game files not found. Copy your extracted USA Xbox disc "

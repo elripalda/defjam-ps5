@@ -90,6 +90,8 @@ echo "==> [package] eboot.bin for $title_id"
 app=$build/ps5-app/$title_id
 rm -rf -- "$app"
 mkdir -p "$app/sce_sys" "$app/sce_module"
+# The code as data, for the MMIO trap (code is execute-only on the PS5).
+python3 "$port/ps5/tools/make_code_bin.py" "$stage/build/llvm-pie.elf" "$app/code.bin"
 "$tool" self --sign --in "$stage/build/eboot.elf" --out "$app/eboot.bin" --magic 0x1D3D154F
 cp "$tri/runtime/libc.prx" "$app/sce_module/libc.prx"
 cat > "$app/sce_sys/param.json" <<EOF

@@ -101,7 +101,11 @@ extern ptrdiff_t g_xbox_mem_offset;
  */
 #define YOUR_GAME_ENTRY_POINT   0x001F6357  /* XBE entry point VA */
 #define YOUR_GAME_XBE_PATH      "game/default.xbe"   /* forward slashes: fine for CreateFile/fopen */
+#ifdef DEFJAM_GAME_DIR_NAME          /* [ps5 port] GameData, as in the other PS5 ports */
+#define YOUR_GAME_DIR            DEFJAM_GAME_DIR_NAME
+#else
 #define YOUR_GAME_DIR            "game"
+#endif
 
 /* ── Forward declarations ──────────────────────────────────── */
 
@@ -382,6 +386,12 @@ void host_fatal(const char *message)
 #else
     fprintf(stderr, "Def Jam: Fight for NY: %s\n", message);
     fflush(stderr);
+#if defined(__PROSPERO__)
+    {   /* [ps5 port] nobody sees stderr on the console */
+        extern void ps5_notify(const char *text);
+        ps5_notify(message);
+    }
+#endif
 #endif
 }
 
@@ -534,6 +544,14 @@ static void fault_handler(int sig, siginfo_t *si, void *ctx)
     print_guest_context((void *)(uintptr_t)HOST_PC(ctx));
     fflush(stdout);
     fflush(stderr);
+#if defined(__PROSPERO__)
+    {   /* [ps5 port] say so on screen, then close instead of hanging */
+        extern void ps5_notify(const char *text);
+        ps5_notify("Def Jam crashed. Send logs/defjam.log.err from the app folder.");
+        sleep(3);
+        _exit(1);
+    }
+#endif
     /* Put the default action back; the instruction faults again and the
      * process ends with the signal, as an unhandled exception would. */
     signal(sig, SIG_DFL);

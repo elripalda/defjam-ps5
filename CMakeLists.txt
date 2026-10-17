@@ -54,6 +54,12 @@ endif()
 option(DEFJAM_SDL3 "Read gamepads through SDL3" ON)
 set(XBOXRECOMP_SDL3 ${DEFJAM_SDL3} CACHE BOOL "Read gamepads through SDL3 (fetched and built statically)" FORCE)
 
+# [ps5 port] SDL3, glslang, the Vulkan entry points and shaderc for the PS5.
+if(PS5)
+    set(DEFJAM_PS5_IMGUI_DIR "${FETCHCONTENT_SOURCE_DIR_IMGUI}")
+    include(${CMAKE_CURRENT_SOURCE_DIR}/ps5/cmake/ps5.cmake)
+endif()
+
 # Builds all runtime libraries and provides the 'xboxrecomp' umbrella target.
 add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 
@@ -82,6 +88,13 @@ if(DEFJAM_BUILD_GAME)
         defjam_windows_resource(DEFJAM_RC NAME defjam_recomp VERSION ${PROJECT_VERSION}
                                 DESCRIPTION "Def Jam: Fight for NY - Recompiled")
         set(HOST_SOURCES ${DEFJAM_RC})
+    elseif(PS5)
+        # [ps5 port] No window and no desktop launcher: ps5/src/host_ps5.c
+        # sends the picture to the TV and reads the DualSense.
+        list(FILTER HOOK_SOURCES EXCLUDE REGEX "/(watchpoint\\.c|pc_launcher\\.cpp|pc_launcher_sdl\\.cpp)$")
+        set(HOST_SOURCES ps5/src/host_ps5.c ps5/src/ps5_libc_compat.c)
+        find_package(SDL3 REQUIRED CONFIG)
+        include(imgui)
     else()
         # The Win32 window and the debug-register watchpoints have no place
         # here; src/host_posix.c has the SDL window and stands in for the rest.
@@ -109,6 +122,14 @@ if(DEFJAM_BUILD_GAME)
     )
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp recomp_settings defjam_imgui d3d11 dxgi dxguid xinput winmm dbghelp shell32)
+    elseif(PS5)
+        # [ps5 port] RADV and the app runtime are linked by ps5/tools/ps5_package.sh;
+        # this link only has to produce the list of inputs.
+        target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp recomp_settings defjam_imgui
+                              SDL3::SDL3 Vulkan::Vulkan SceUserService ScePad SceSystemService
+                              SceAudioOut pthread m)
+        target_compile_options(${PROJECT_NAME} PRIVATE -fno-strict-aliasing -fwrapv -ffp-contract=off)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE DEFJAM_GAME_DIR_NAME="GameData")
     else()
         # One SDL for the window, the sound and the pads: SDL3, the system's.
         defjam_app_icon(${PROJECT_NAME})

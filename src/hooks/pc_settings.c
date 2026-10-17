@@ -245,6 +245,11 @@ static int find_game_root(void)
     char dir[PATH_MAX], probe[PATH_MAX + 32];
     int up;
 
+#ifdef DEFJAM_GAME_DIR_NAME
+    /* [ps5 port] host_ps5.c made the app's folder current; the disc is in GameData. */
+    (void)dir; (void)probe; (void)up;
+    return file_exists(DEFJAM_GAME_DIR_NAME "/default.xbe");
+#endif
     if (file_exists("game/default.xbe"))
         return 1;
     if (!program_path(dir, sizeof(dir)))

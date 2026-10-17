@@ -467,9 +467,107 @@ static void early_fault_handler(void)
 
 /* ── Start-up ──────────────────────────────────────────────────────────── */
 
+/* The console writes files in the app folder slowly, and every few seconds
+ * one write takes a third of a second. A thread that flushed a log then
+ * stalled, and when it was the one running the GPU's work, the game stuttered.
+ * stdout and stderr write into pipes instead; one thread per log moves the
+ * text to its file, so only that thread ever waits for the disk. */
+struct log_pump { int in, out; char chunk[65536]; };
+
+static void *log_pump_thread(void *arg)
+{
+    struct log_pump *lp = arg;
+    for (;;) {
+        ssize_t n = read(lp->in, lp->chunk, sizeof lp->chunk);
+        if (n > 0) {
+            ssize_t off = 0;
+            while (off < n) {
+                ssize_t w = write(lp->out, lp->chunk + off, (size_t)(n - off));
+                if (w <= 0)
+                    break;
+                off += w;
+            }
+        } else if (n == 0) {
+            break;
+        } else {
+            usleep(1000);
+        }
+    }
+    return NULL;
+}
+
+static int s_log_pipes;     /* how many of the two logs go through a pipe */
+
 static int log_to_file(const char *path, FILE *f)
 {
-    return freopen(path, "w", f) ? 0 : -1;
+    static struct log_pump pumps[2];
+    int fd, out, p[2];
+    pthread_t th;
+
+    if (!freopen(path, "w", f))
+        return -1;
+    fd = fileno(f);
+    if (fd < 0 || s_log_pipes >= 2)
+        return 0;
+    out = open(path, O_WRONLY | O_APPEND);
+    if (out < 0)
+        return 0;
+    if (pipe(p) != 0) {
+        close(out);
+        return 0;           /* writes go to the file directly */
+    }
+    pumps[s_log_pipes].in = p[0];
+    pumps[s_log_pipes].out = out;
+    if (pthread_create(&th, NULL, log_pump_thread, &pumps[s_log_pipes]) != 0) {
+        close(p[0]); close(p[1]); close(out);
+        return 0;
+    }
+    pthread_detach(th);
+    if (dup2(p[1], fd) < 0) {
+        close(p[1]);
+        return 0;
+    }
+    close(p[1]);
+    s_log_pipes++;
+    return 0;
+}
+
+/* Files the app makes belong to it, and a PS5 FTP server running as another
+ * user could not delete them (the save folder): open them up to everyone. */
+#include <dirent.h>
+static void open_up_tree(const char *dir, int depth)
+{
+    DIR *d;
+    struct dirent *e;
+    char path[768];
+
+    chmod(dir, 0777);
+    if (depth > 6 || !(d = opendir(dir)))
+        return;
+    while ((e = readdir(d)) != NULL) {
+        struct stat st;
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+            continue;
+        snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
+        if (lstat(path, &st) != 0)
+            continue;
+        if (S_ISDIR(st.st_mode))
+            open_up_tree(path, depth + 1);
+        else
+            chmod(path, 0666);
+    }
+    closedir(d);
+}
+
+static void open_up_app_files(void)
+{
+    const char *subs[] = { "save", "logs", "radv-shader-cache" };
+    char path[512];
+    unsigned i;
+    for (i = 0; i < sizeof subs / sizeof subs[0]; i++) {
+        snprintf(path, sizeof path, "%s/%s", ps5_root(), subs[i]);
+        open_up_tree(path, 0);
+    }
 }
 
 /* How long the basic things the runtime leans on take here, once at start. */
@@ -680,6 +778,10 @@ static void *heartbeat_thread(void *unused)
     for (;;) {
         sleep(step);
         secs += step;
+        if (secs == 10 || secs % 60 == 0)
+            open_up_app_files();
+        if (secs == 10)
+            ps5_logf("[PS5] logs through %d pipe(s)\n", s_log_pipes);
         ps5_logf("[PS5] %u s: kernel calls %lld, guest calls %llu, frames %u, %d guest thread(s)\n",
                  secs, xbox_kernel_call_count(), (unsigned long long)g_icall_count,
                  g_vk_frames_presented, (int)s_guest_thread_count);
@@ -778,6 +880,8 @@ int host_posix_run(int (*game_main)(void))
     pthread_join(th, NULL);
     fflush(stdout);
     fflush(stderr);
+    open_up_app_files();
+    sleep(1);               /* the log pumps write out what is left */
     sceSystemServiceLoadExec("exit", NULL);
     return s_game_result;
 }

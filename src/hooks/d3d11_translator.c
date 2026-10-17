@@ -724,5 +724,7 @@ void d3d11_translator_report(void)
                     "methods handled %u ignored %u  clears %u\n",
             st.frames, st.draw_calls, st.vertices_submitted,
             st.methods_handled, st.methods_ignored, st.clears);
-    fflush(stderr);
+#if !defined(__PROSPERO__)
+    fflush(stderr);     /* [ps5 port] the console flushes once a second */
+#endif
 }

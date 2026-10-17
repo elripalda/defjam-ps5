@@ -1,0 +1,84 @@
+60/120 Hz switch for the PS5 video output driver (mihawk-99/PS5_Mesa at 0b2d6d1, src/vulkan/wsi).
+Apply in .deps/work/radv-src of ps5-plume-triangle, then tools/build-radv.sh release.
+
+--- a/src/vulkan/wsi/wsi_common_videoout.c
++++ b/src/vulkan/wsi/wsi_common_videoout.c
+@@ -228,6 +228,9 @@
+    .handle = -1,
+ };
+ static once_flag videoout_once = ONCE_FLAG_INIT;
++/* The application's say over 119.88 Hz (wsi_videoout_want_high_frame_rate):
++ * -1 leaves it to the title's metadata, 0 keeps 59.94 Hz, 1 asks for 119.88. */
++static int videoout_hfr_wanted = -1;
+ 
+ static void
+ videoout_output_init_once(void)
+@@ -307,7 +310,7 @@
+       fprintf(stderr, "wsi/videoout: sceVideoOutOpen failed: 0x%08x\n", (unsigned)out->handle);
+       return false;
+    }
+-   if (videoout_title_declares_high_frame_rate()) {
++   if (videoout_title_declares_high_frame_rate() && videoout_hfr_wanted != 0) {
+       const int supported =
+          sceVideoOutIsOutputSupported(out->handle, PS5_VIDEO_OUT_MODE_HIGH_FRAME_RATE, NULL, NULL, NULL);
+       const int configured =
+@@ -344,6 +347,59 @@
+    mtx_unlock(&videoout_output.lock);
+ }
+ 
++/* An application's switch between 59.94 and 119.88 Hz. Before VideoOut opens
++ * it decides the rate VideoOut opens at; after, it switches the output (the
++ * display shows nothing for a moment while it changes). The swapchain is not
++ * touched: its images are flipped at the vblanks of whichever rate is on.
++ * Returns 1 when the output is at 119.88 Hz now, 0 at 59.94, -1 before VideoOut
++ * opens. */
++int wsi_videoout_want_high_frame_rate(int want);
++int
++wsi_videoout_want_high_frame_rate(int want)
++{
++   struct wsi_videoout_output *out = &videoout_output;
++   int now;
++   call_once(&videoout_once, videoout_output_init_once);
++   mtx_lock(&out->lock);
++   videoout_hfr_wanted = want ? 1 : 0;
++   if (!out->opened || out->handle < 0) {
++      mtx_unlock(&out->lock);
++      return -1;
++   }
++   if (want && !out->high_frame_rate) {
++      const int supported = videoout_title_declares_high_frame_rate()
++                               ? sceVideoOutIsOutputSupported(out->handle, PS5_VIDEO_OUT_MODE_HIGH_FRAME_RATE, NULL,
++                                                              NULL, NULL)
++                               : 0;
++      const int configured =
++         supported > 0 ? sceVideoOutConfigureOutput(out->handle, PS5_VIDEO_OUT_MODE_HIGH_FRAME_RATE, NULL, NULL, NULL)
++                       : -1;
++      if (configured == 0) {
++         const uint64_t period = videoout_vblank_period_ns(out->handle);
++         if (period > VIDEOOUT_HIGH_REFRESH_LIMIT_NS) {
++            sceVideoOutConfigureOutput(out->handle, PS5_VIDEO_OUT_MODE_RESTORE, NULL, NULL, NULL);
++            fprintf(stderr, "wsi/videoout: 119.88 Hz accepted, but a vblank comes every %.3f ms; 59.94 Hz kept\n",
++                    (double)period / 1e6);
++         } else {
++            out->high_frame_rate = true;
++         }
++      } else {
++         fprintf(stderr, "wsi/videoout: 119.88 Hz %s (%d)\n", supported > 0 ? "refused" : "not supported",
++                 configured);
++      }
++   } else if (!want && out->high_frame_rate) {
++      const int restored = sceVideoOutConfigureOutput(out->handle, PS5_VIDEO_OUT_MODE_RESTORE, NULL, NULL, NULL);
++      if (restored == 0)
++         out->high_frame_rate = false;
++      else
++         fprintf(stderr, "wsi/videoout: 59.94 Hz refused (%d)\n", restored);
++   }
++   now = out->high_frame_rate ? 1 : 0;
++   mtx_unlock(&out->lock);
++   fprintf(stderr, "wsi/videoout: output at %s Hz\n", now ? "119.88" : "59.94");
++   return now;
++}
++
+ /* The framebuffers, cleared and registered once per process. Under lock. */
+ static VkResult
+ videoout_register_locked(void)

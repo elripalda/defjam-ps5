@@ -117,7 +117,7 @@ static RecompSetting g_display_settings[] = {
       "Keep the HD textures compressed (DXT): a quarter of the memory, and a copy in texture-cache/ so they load "
       "faster the next time. Off keeps every pixel exactly as the pack has it." },
     { "display", "frame_gen", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, 0,
-      "Beta: a generated picture between every two frames on a 120 Hz TV (MihawkGen). Switches while playing." },
+      "Beta: a generated picture between every two frames, with the TV at 120 Hz (MihawkGen). Off puts the TV back at 60." },
 #endif
 };
 #define DISPLAY_SETTING_COUNT (sizeof(g_display_settings) / sizeof(g_display_settings[0]))
@@ -404,9 +404,9 @@ void pc_settings_apply_display(void)
     d3d8_present_set_vsync(pc_display("vsync", 1));
 #if defined(__PROSPERO__)
     {
-        extern void d3d8_vk_set_frame_generation(int on);
+        extern void ps5_set_frame_generation(int on);     /* ps5/src/host_ps5.c: the generator and the TV's rate */
         extern void d3d8_vk_set_native_bc(int on);
-        d3d8_vk_set_frame_generation(pc_display("frame_gen", 0));
+        ps5_set_frame_generation(pc_display("frame_gen", 0));
         /* Compressed textures covers the game's own DXT textures on the GPU too. */
         d3d8_vk_set_native_bc(recomp_settings_get("textures", "compress", 1));
     }

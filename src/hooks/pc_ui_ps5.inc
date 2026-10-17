@@ -324,11 +324,10 @@ void page_video()
 
     section("SCREEN");
     toggle_row("ui", "show_fps", "Frame counter", "Frames per second in the corner.");
-    if (ps5_frame_gen_available())
-        toggle_row("display", "frame_gen", "Frame generation (beta)",
-                   "120 fps on a 120 Hz TV: a made-up picture between every two frames. Adds a little input lag.");
-    else
-        info_row("frame_gen", "Frame generation (beta)", "Needs a 120 Hz TV");
+    toggle_row("display", "frame_gen", "Frame generation (beta)",
+               ps5_frame_gen_available()
+                   ? "120 fps: the TV switches to 120 Hz and a made-up picture goes between every two frames. Off: 60 Hz."
+                   : "Your TV did not switch to 120 Hz, so frames are shown as they are.");
 }
 
 const char *pad_source_label(int src)

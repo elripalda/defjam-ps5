@@ -287,6 +287,15 @@ static void pads_init(void)
 static uint32_t s_width = 1920, s_height = 1080;
 static unsigned s_refresh = 60;
 static int s_surface_made;
+static int s_fg_registered, s_fg_refused;   /* the generator is set; the TV did not take 120 Hz */
+static int s_fg_asked = -1;                 /* the last switch the menu gave */
+/* The video output driver's 60/120 Hz switch (radv: wsi_common_videoout.c, ps5/patches). Weak, as
+ * the driver is linked in at packaging (ps5_package.sh); a driver without it leaves the rate alone. */
+int wsi_videoout_want_high_frame_rate(int want) __attribute__((weak));
+static int want_high_rate(int want)
+{
+    return wsi_videoout_want_high_frame_rate ? wsi_videoout_want_high_frame_rate(want) : -1;
+}
 
 static int create_surface(void *instance_p, void *surface_p, void *user)
 {
@@ -301,8 +310,12 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     VkExtent2D extent = { 1920, 1080 };
     uint32_t plane = 0;
     VkDisplaySurfaceCreateInfoKHR ci;
-    int want_4k = pc_display("output_4k", 1);
+    int want_4k = pc_display("output_4k", 1), want_120 = pc_display("frame_gen", 0);
     (void)user;
+
+    /* The video output opens at 120 Hz only for frame generation (param.json allows it). */
+    want_high_rate(want_120);
+    s_fg_asked = want_120;
 
     if (vkEnumeratePhysicalDevices(instance, &n, &phys) < 0 || !phys) {
         fprintf(stderr, "[PS5] no GPU\n");
@@ -335,12 +348,9 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
                                        (modes[m].parameters.refreshRate + 500) / 1000);
             fprintf(stderr, "[PS5] display modes: %s\n", list);
         }
-        /* 120 Hz whenever the TV takes it. The video output is switched to 120 as it opens
-         * (param.json asks for it), whichever mode is picked here, so the 120 mode is the
-         * truth; frame generation then fills every other refresh, or each frame is shown
-         * twice (d3d8_vk_set_frame_generation), and the switch works while playing.
-         * Otherwise 60: 4K when the setting asks and the TV offers it, else 1080p. */
-        {
+        /* With frame generation, 120 Hz when the TV takes it (the output then opened at 120 and
+         * offers that mode). Otherwise 60: 4K when the setting asks and the TV offers it. */
+        if (want_120) {
             static const uint32_t sizes[3][2] = { { 3840, 2160 }, { 2560, 1440 }, { 1920, 1080 } };
             uint32_t k;
             for (k = want_4k ? 0 : 1; k < 3 && best < 0; k++)
@@ -398,15 +408,16 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     s_height = extent.height;
     s_surface_made = 1;
     fprintf(stderr, "[PS5] TV output %ux%u at %u Hz\n", s_width, s_height, s_refresh);
-    {
-        /* The generator is there on a 120 Hz TV; the menu switches it (pc_settings_apply_display). */
+    if (want_120) {
         extern void ps5_framegen_register(void);
         if (s_refresh >= 100) {
             ps5_framegen_register();
-            fprintf(stderr, "[PS5] frame generation (beta): %s, switchable while playing\n",
-                    pc_display("frame_gen", 0) ? "on" : "off");
+            s_fg_registered = 1;
+            d3d8_vk_set_frame_generation(1);
+            fprintf(stderr, "[PS5] frame generation (beta): on\n");
         } else {
-            fprintf(stderr, "[PS5] frame generation (beta): the TV offers no 120 Hz mode, so it is not available\n");
+            s_fg_refused = 1;
+            fprintf(stderr, "[PS5] frame generation (beta): the TV did not take 120 Hz, so it stays off\n");
         }
     }
     (fflush)(stderr);
@@ -427,9 +438,45 @@ static unsigned refresh_hz(void *user)
     return s_refresh;
 }
 
-/* For the menu: the TV runs at 120, so frame generation can be switched on. Before the
- * display is set up it does not know yet and says yes. */
-int ps5_frame_gen_available(void) { return !s_surface_made || s_refresh >= 100; }
+/* For the menu: 0 once the TV refused 120 Hz for frame generation. */
+int ps5_frame_gen_available(void) { return !s_fg_refused; }
+
+/* The menu's frame generation switch (pc_settings_apply_display, on every settings change).
+ * On: the output goes to 120 Hz (the TV shows nothing for a moment) and the generator fills
+ * every other refresh. Off: the generator stops and the output goes back to 60 Hz. Before the
+ * display is set up, create_surface does this as it opens the output. */
+void ps5_set_frame_generation(int on)
+{
+    extern void ps5_framegen_register(void);
+    int now;
+    on = on != 0;
+    if (on == s_fg_asked)
+        return;
+    s_fg_asked = on;
+    if (!s_surface_made) {
+        d3d8_vk_set_frame_generation(on);
+        return;
+    }
+    if (!on)
+        d3d8_vk_set_frame_generation(0);     /* before the rate drops: no frame shown twice at 60 */
+    now = want_high_rate(on);
+    if (now >= 0)
+        s_refresh = now ? 120 : 60;
+    if (on) {
+        if (now == 1) {
+            if (!s_fg_registered) {
+                ps5_framegen_register();
+                s_fg_registered = 1;
+            }
+            s_fg_refused = 0;
+            d3d8_vk_set_frame_generation(1);
+        } else {
+            s_fg_refused = 1;
+        }
+    }
+    fprintf(stderr, "[PS5] frame generation (beta): %s, TV at %u Hz\n",
+            on && now == 1 ? "on" : on ? "refused" : "off", s_refresh);
+}
 
 /* ── What the rest of the program asks the host ────────────────────────── */
 

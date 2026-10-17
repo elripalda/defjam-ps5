@@ -92,7 +92,8 @@ if(DEFJAM_BUILD_GAME)
         # [ps5 port] No window and no desktop launcher: ps5/src/host_ps5.c
         # sends the picture to the TV and reads the DualSense.
         list(FILTER HOOK_SOURCES EXCLUDE REGEX "/(watchpoint\\.c|pc_launcher\\.cpp|pc_launcher_sdl\\.cpp)$")
-        set(HOST_SOURCES ps5/src/host_ps5.c ps5/src/ps5_libc_compat.c ps5/src/ps5_profile.c)
+        set(HOST_SOURCES ps5/src/host_ps5.c ps5/src/ps5_libc_compat.c ps5/src/ps5_profile.c
+                         ps5/src/ps5_gamewatch.c)
         find_package(SDL3 REQUIRED CONFIG)
         include(imgui)
     else()

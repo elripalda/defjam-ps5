@@ -90,6 +90,18 @@ static Sint16 axis(uint8_t v)
     return (Sint16)(a > 32767 ? 32767 : a);
 }
 
+/* A virtual joystick's trigger axes use the whole range, released at the
+ * minimum (SDL fills them with SDL_JOYSTICK_AXIS_MIN when it attaches one),
+ * and SDL halves that range into the gamepad's 0..32767. Written as 0..32767,
+ * a trigger at rest read as half pulled, so the title saw both triggers held
+ * all the time: harmless in a fight (its press threshold is half way), but
+ * the first-time help popups close only when nothing at all is held, and the
+ * pause menu's START close is refused while a held trigger auto-repeats. */
+static Sint16 trigger(uint8_t v)
+{
+    return (Sint16)((int)v * 65535 / 255 - 32768);
+}
+
 static void SDLCALL pad_update(void *userdata)
 {
     Ps5Pad *p = userdata;
@@ -120,8 +132,8 @@ static void SDLCALL pad_update(void *userdata)
     SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_LEFTY, axis(d.ly));
     SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHTX, axis(d.rx));
     SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHTY, axis(d.ry));
-    SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, (Sint16)(d.l2 * 32767 / 255));
-    SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, (Sint16)(d.r2 * 32767 / 255));
+    SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, trigger(d.l2));
+    SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, trigger(d.r2));
 }
 
 static bool SDLCALL pad_rumble(void *userdata, Uint16 low, Uint16 high)
@@ -583,7 +595,8 @@ static void ps5_time_basics(void)
     struct timespec a, b, c;
     pthread_key_t key;
     pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
-    double w_err, flush, gettime, yield, spec, tls, mtx, slp;
+    double w_err, flush, gettime, tsc, yield, spec, tls, mtx, slp;
+    uint64_t tsc_hz;
     int i;
 
     clock_gettime(CLOCK_MONOTONIC, &a);
@@ -604,6 +617,19 @@ static void ps5_time_basics(void)
         clock_gettime(CLOCK_MONOTONIC, &c);
     clock_gettime(CLOCK_MONOTONIC, &b);
     gettime = bench_us(a, b, 1000);
+
+    {
+        extern uint64_t sceKernelReadTsc(void);
+        extern uint64_t sceKernelGetTscFrequency(void);
+        volatile uint64_t sink = 0;
+        clock_gettime(CLOCK_MONOTONIC, &a);
+        for (i = 0; i < 1000; i++)
+            sink += sceKernelReadTsc();
+        clock_gettime(CLOCK_MONOTONIC, &b);
+        tsc = bench_us(a, b, 1000);
+        tsc_hz = sceKernelGetTscFrequency();
+        (void)sink;
+    }
 
     clock_gettime(CLOCK_MONOTONIC, &a);
     for (i = 0; i < 100; i++)
@@ -639,9 +665,10 @@ static void ps5_time_basics(void)
     clock_gettime(CLOCK_MONOTONIC, &b);
     slp = bench_us(a, b, 10);
 
-    fprintf(stderr, "[PS5] timing (us each): log line %.1f, flushed line %.1f, clock %.3f, yield %.1f,"
-            " getspecific %.3f, thread-local %.4f, mutex %.3f, usleep(1) %.1f\n",
-            w_err, flush, gettime, yield, spec, tls, mtx, slp);
+    fprintf(stderr, "[PS5] timing (us each): log line %.1f, flushed line %.1f, clock %.3f,"
+            " TSC %.3f (%llu Hz), yield %.1f, getspecific %.3f, thread-local %.4f, mutex %.3f,"
+            " usleep(1) %.1f\n",
+            w_err, flush, gettime, tsc, (unsigned long long)tsc_hz, yield, spec, tls, mtx, slp);
 }
 
 static int (*s_game_main)(void);
@@ -661,6 +688,7 @@ static volatile int s_guest_thread_count;
 void ps5_prof_register(const char *name);
 void ps5_prof_start(void);
 void ps5_prof_report(unsigned secs);
+void ps5_gamewatch_start(void);
 
 void ps5_guest_thread_register(void)
 {
@@ -702,6 +730,7 @@ static void *heartbeat_thread(void *unused)
     pthread_t fl;
     (void)unused;
     ps5_prof_start();
+    ps5_gamewatch_start();
     if (pthread_create(&fl, NULL, flush_thread, NULL) == 0)
         pthread_detach(fl);
     for (;;) {
@@ -793,6 +822,11 @@ int host_posix_run(int (*game_main)(void))
 
     /* One [PACING] line every two seconds while frames are being shown. */
     setenv("RECOMP_PRESENT_PACING", "1", 0);
+    /* The title's 60 Hz frame clock is the GPU timer's alarm: a [PTIMER] line
+     * every five seconds with how many alarms fired, and one if an alarm
+     * fires and is never re-armed (the clock, and with it the game's input
+     * thread, stopping). */
+    setenv("RECOMP_PTIMER_TRACE", "1", 0);
     {
         pthread_t hb;
         if (pthread_create(&hb, NULL, heartbeat_thread, NULL) == 0)

@@ -449,6 +449,64 @@ static void early_fault_handler(void)
 
 /* ── Start-up ──────────────────────────────────────────────────────────── */
 
+/* A write to a file in the app folder takes the console a long time (the
+ * game thread sat in it for most of every second, one log line at a time).
+ * stdout and stderr go into pipes instead, and one thread per log moves the
+ * text to the file in large pieces. */
+struct log_pump { int in, out; char chunk[65536]; };
+
+static void *log_pump_thread(void *arg)
+{
+    struct log_pump *lp = arg;
+    char *chunk = lp->chunk;
+    for (;;) {
+        ssize_t n = read(lp->in, chunk, sizeof lp->chunk);
+        if (n > 0) {
+            ssize_t off = 0;
+            while (off < n) {
+                ssize_t w = write(lp->out, chunk + off, (size_t)(n - off));
+                if (w <= 0)
+                    break;
+                off += w;
+            }
+        } else if (n == 0) {
+            break;
+        } else {
+            usleep(1000);
+        }
+    }
+    return NULL;
+}
+
+static int log_to_file(const char *path, FILE *f)
+{
+    static struct log_pump pumps[2];
+    static int used;
+    int out, p[2], fd;
+    pthread_t th;
+
+    if (!freopen(path, "w", f))
+        return -1;
+    fd = fileno(f);
+    out = open(path, O_WRONLY);
+    if (out < 0 || fd < 0 || used >= 2 || pipe(p) != 0) {
+        if (out >= 0)
+            close(out);
+        return 0;               /* writes go to the file directly, as before */
+    }
+    pumps[used].in = p[0];
+    pumps[used].out = out;
+    if (pthread_create(&th, NULL, log_pump_thread, &pumps[used]) != 0) {
+        close(p[0]); close(p[1]); close(out);
+        return 0;
+    }
+    used++;
+    pthread_detach(th);
+    dup2(p[1], fd);
+    close(p[1]);
+    return 0;
+}
+
 static int (*s_game_main)(void);
 static int s_game_result;
 
@@ -464,7 +522,7 @@ uint64_t mmio_trap_neighbour_count(void);
 #define PS5_MAX_GUEST_THREADS 32
 static pthread_t s_guest_threads[PS5_MAX_GUEST_THREADS];
 static volatile int s_guest_thread_count;
-static volatile uintptr_t s_sample_pc;
+static volatile uintptr_t s_sample_pc, s_sample_ret;
 static volatile int s_sample_seq;
 
 void ps5_guest_thread_register(void)
@@ -479,6 +537,8 @@ static void sample_handler(int sig, siginfo_t *si, void *uctx)
     (void)sig; (void)si;
     /* rip: slot 20 of the mcontext, 64 bytes in (mmio_trap.c). */
     s_sample_pc = ((uint64_t *)((uint8_t *)uctx + 64))[20];
+    /* rsp: slot 23. A system call stub is a leaf; its caller is on top. */
+    s_sample_ret = *(uint64_t *)((uint64_t *)((uint8_t *)uctx + 64))[23];
     __atomic_add_fetch(&s_sample_seq, 1, __ATOMIC_SEQ_CST);
 }
 
@@ -501,9 +561,10 @@ static void sample_guest_threads(void)
     for (t = 0; t < n; t++) {
         char line[512];
         int len = snprintf(line, sizeof line, "[PS5]   thread %d pcs:", t);
-        for (k = 0; k < 8 && len < (int)sizeof line - 20; k++) {
+        for (k = 0; k < 6 && len < (int)sizeof line - 40; k++) {
             uintptr_t pc = sample_thread(s_guest_threads[t]);
-            len += snprintf(line + len, sizeof line - len, " %lx", (unsigned long)pc);
+            len += snprintf(line + len, sizeof line - len, " %lx<%lx", (unsigned long)pc,
+                            (unsigned long)s_sample_ret);
             usleep(3000);
         }
         fprintf(stderr, "%s\n", line);
@@ -573,10 +634,10 @@ int host_posix_run(int (*game_main)(void))
     snprintf(log, sizeof log, "%s/logs", root);
     mkdir(log, 0777);
     snprintf(log, sizeof log, "%s/logs/defjam.log", root);
-    if (!freopen(log, "w", stdout))
+    if (log_to_file(log, stdout) != 0)
         ps5_notify("Def Jam can't write its log (logs folder in the app folder)");
     snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);
-    freopen(log, "w", stderr);
+    log_to_file(log, stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);

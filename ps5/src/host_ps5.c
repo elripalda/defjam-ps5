@@ -286,6 +286,7 @@ static void pads_init(void)
 
 static uint32_t s_width = 1920, s_height = 1080;
 static unsigned s_refresh = 60;
+static int s_surface_made;
 
 static int create_surface(void *instance_p, void *surface_p, void *user)
 {
@@ -300,7 +301,7 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     VkExtent2D extent = { 1920, 1080 };
     uint32_t plane = 0;
     VkDisplaySurfaceCreateInfoKHR ci;
-    int want_4k = pc_display("output_4k", 0), want_120 = pc_display("frame_gen", 0);
+    int want_4k = pc_display("output_4k", 1);
     (void)user;
 
     if (vkEnumeratePhysicalDevices(instance, &n, &phys) < 0 || !phys) {
@@ -334,11 +335,12 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
                                        (modes[m].parameters.refreshRate + 500) / 1000);
             fprintf(stderr, "[PS5] display modes: %s\n", list);
         }
-        /* With frame generation, 120 Hz: 4K when asked, else 1440p or 1080p,
-         * whichever the TV offers at 120. Otherwise (or when it offers none)
-         * 1080p at 60 by default (the game draws at a few times its 640x480,
-         * and the TV scales); 4K when the setting asks and the TV offers it. */
-        if (want_120) {
+        /* 120 Hz whenever the TV takes it. The video output is switched to 120 as it opens
+         * (param.json asks for it), whichever mode is picked here, so the 120 mode is the
+         * truth; frame generation then fills every other refresh, or each frame is shown
+         * twice (d3d8_vk_set_frame_generation), and the switch works while playing.
+         * Otherwise 60: 4K when the setting asks and the TV offers it, else 1080p. */
+        {
             static const uint32_t sizes[3][2] = { { 3840, 2160 }, { 2560, 1440 }, { 1920, 1080 } };
             uint32_t k;
             for (k = want_4k ? 0 : 1; k < 3 && best < 0; k++)
@@ -347,6 +349,8 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
                     if (e.width == sizes[k][0] && e.height == sizes[k][1] &&
                         modes[m].parameters.refreshRate >= 119000) { best = (int)m; break; }
                 }
+            for (m = 0; m < modes_n && best < 0; m++)
+                if (modes[m].parameters.refreshRate >= 119000) { best = (int)m; break; }
         }
         for (m = 0; m < modes_n && best < 0; m++) {
             VkExtent2D e = modes[m].parameters.visibleRegion;
@@ -392,14 +396,17 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     }
     s_width = extent.width;
     s_height = extent.height;
+    s_surface_made = 1;
     fprintf(stderr, "[PS5] TV output %ux%u at %u Hz\n", s_width, s_height, s_refresh);
-    if (want_120) {
+    {
+        /* The generator is there on a 120 Hz TV; the menu switches it (pc_settings_apply_display). */
         extern void ps5_framegen_register(void);
         if (s_refresh >= 100) {
             ps5_framegen_register();
-            fprintf(stderr, "[PS5] frame generation (beta): on\n");
+            fprintf(stderr, "[PS5] frame generation (beta): %s, switchable while playing\n",
+                    pc_display("frame_gen", 0) ? "on" : "off");
         } else {
-            fprintf(stderr, "[PS5] frame generation (beta): the TV offers no 120 Hz mode, so it stays off\n");
+            fprintf(stderr, "[PS5] frame generation (beta): the TV offers no 120 Hz mode, so it is not available\n");
         }
     }
     (fflush)(stderr);
@@ -419,6 +426,10 @@ static unsigned refresh_hz(void *user)
     (void)user;
     return s_refresh;
 }
+
+/* For the menu: the TV runs at 120, so frame generation can be switched on. Before the
+ * display is set up it does not know yet and says yes. */
+int ps5_frame_gen_available(void) { return !s_surface_made || s_refresh >= 100; }
 
 /* ── What the rest of the program asks the host ────────────────────────── */
 
@@ -811,7 +822,7 @@ const char *ps5_save_dir(void)
 
 static void open_up_app_files(void)
 {
-    const char *subs[] = { "save", "logs", "radv-shader-cache" };
+    const char *subs[] = { "save", "logs", "radv-shader-cache", "texture-cache" };
     char path[512];
     unsigned i;
     for (i = 0; i < sizeof subs / sizeof subs[0]; i++) {
@@ -1104,6 +1115,21 @@ void ps5_exit_app(int code)
     open_up_app_files();
     sceSystemServiceLoadExec("exit", NULL);
     _exit(code);
+}
+
+/* The menu's restart (settings that only take effect at the start): the app's
+ * own eboot.bin again, in place of this one. Returns only when the system
+ * refuses, with its code; the player then closes the game and starts it. */
+int ps5_restart_app(void)
+{
+    int r;
+    fprintf(stderr, "[PS5] starting the game again for the new settings\n");
+    (fflush)(stdout);
+    (fflush)(stderr);
+    open_up_app_files();
+    r = sceSystemServiceLoadExec("/app0/eboot.bin", NULL);
+    fprintf(stderr, "[PS5] the system did not start the game again (0x%08x)\n", (unsigned)r);
+    return r ? r : -1;
 }
 
 /* The last two runs' logs are kept as *.prev and *.prev2, so a crash

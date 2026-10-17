@@ -28,6 +28,11 @@ int g_page;
 bool g_focus_first = true;      // put the cursor on the page's first row
 std::string g_help;             // the focused row's line, shown at the bottom
 UiTick g_reset_until;           // "reset all settings" waits this long for the second press
+UiTick g_restart_until;         // the same for "restart to apply"
+bool g_restart_failed;          // the system said no: the player closes and starts the game
+
+extern "C" int ps5_frame_gen_available(void);
+extern "C" int ps5_restart_app(void);
 
 // ---- drawing --------------------------------------------------------------------------------------------------
 
@@ -309,16 +314,21 @@ void page_video()
         if (asked == ROW_LEFT) set_value(s, s->stored > s->min ? s->stored - 1 : s->max);
         else if (asked != ROW_NONE) set_value(s, s->stored < s->max ? s->stored + 1 : s->min);
     }
-    toggle_row("display", "output_4k", "4K output", "Send 3840×2160 to the TV. Off sends 1080p.");
-    toggle_row("textures", "enabled", "HD textures", "Fighters, venues and crowds at 4x (the HD pack in mods).");
-    toggle_row("textures", "menus", "HD menus", "The remastered menus and HUD (mods/hd-menus).");
+    // No 4K output switch: the console's video output takes a 3840×2160 picture and the system scales it to the TV.
+    toggle_row("textures", "enabled", "HD textures", "Fighters, venues and crowds at 4x (the HD packs in mods). Switches at once.");
+    toggle_row("textures", "menus", "HD menus", "The AI-remastered menus and HUD (mods/hd-menus). Off by default.");
+    toggle_row("textures", "compress", "Compressed textures",
+               "Textures kept compressed on the GPU: a quarter of the memory, and HD ones load faster the next time. Off: every pixel exact.");
     toggle_row("display", "sharp_text", "Sharper text", "Menu text redrawn with clean edges.");
     toggle_row("display", "gamma", "Original brightness", "The game's own brightness curve, as it shipped.");
 
     section("SCREEN");
     toggle_row("ui", "show_fps", "Frame counter", "Frames per second in the corner.");
-    toggle_row("display", "frame_gen", "Frame generation (beta)",
-               "120 fps on a 120 Hz TV: a made-up picture between every two frames. Adds a little input lag.");
+    if (ps5_frame_gen_available())
+        toggle_row("display", "frame_gen", "Frame generation (beta)",
+                   "120 fps on a 120 Hz TV: a made-up picture between every two frames. Adds a little input lag.");
+    else
+        info_row("frame_gen", "Frame generation (beta)", "Needs a 120 Hz TV");
 }
 
 const char *pad_source_label(int src)
@@ -578,10 +588,13 @@ void footer()
     if (!g_help.empty())
         dl->AddText(f, F * 0.95f, ImVec2(p.x + F * 0.85f, p.y + F * 0.35f), kTextSoft, g_help.c_str(), nullptr, w - F * 1.7f);
 
-    // What the buttons do, from the right.
+    // What the buttons do, from the right. Triangle restarts when a change waits for it.
     float cy = p.y + F * 2.75f, gh = F * 0.9f, fs = F * 1.0f, x = p.x + w - F * 0.85f;
-    struct Legend { Glyph g; const char *what; } legend[] = { { G_L1, "PAGES" }, { G_CIRCLE, "CLOSE" }, { G_CROSS, "SELECT" } };
+    std::string waiting = restart_needed();
+    struct Legend { Glyph g; const char *what; } legend[] = { { G_L1, "PAGES" }, { G_CIRCLE, "CLOSE" }, { G_CROSS, "SELECT" },
+                                                              { G_TRIANGLE, "RESTART" } };
     for (const Legend &l : legend) {
+        if (l.g == G_TRIANGLE && (waiting.empty() || g_restart_failed)) continue;
         x -= text_size(d, fs, l.what).x;
         text_mid(dl, d, fs, x, cy, kTextSoft, l.what);
         x -= F * 0.35f;
@@ -597,8 +610,17 @@ void footer()
         }
         x -= F * 1.2f;
     }
-    if (!restart_needed().empty())
-        text_mid(dl, f, F * 0.95f, p.x + F * 0.85f, cy, kAmber, "Restart the game to apply your changes.");
+    if (!waiting.empty()) {
+        // As much as fits beside the legend.
+        std::string said = g_restart_failed ? std::string("Close the game and start it again to apply: ") + waiting
+                         : ui_ticks() < g_restart_until ? std::string("Press Triangle again to restart now. Play since your last save is lost.")
+                         : std::string("Restart to apply: ") + waiting;
+        float room = x - (p.x + F * 0.85f) + F * 0.4f;
+        if (text_size(f, F * 0.95f, said.c_str()).x > room)
+            said = g_restart_failed ? "Close the game and start it again to apply your changes."
+                 : ui_ticks() < g_restart_until ? "Press Triangle again to restart now." : "Restart to apply your changes.";
+        text_mid(dl, f, F * 0.95f, p.x + F * 0.85f, cy, kAmber, said.c_str());
+    }
     ImGui::Dummy(ImVec2(w, footer_height() - ImGui::GetStyle().ItemSpacing.y));
 }
 
@@ -612,6 +634,16 @@ UiResult ui_draw(UiMode, float x, float y, float width, float height)
     if (!ui_capturing()) {
         if (ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false)) { g_page = (g_page + PAGE_COUNT - 1) % PAGE_COUNT; g_focus_first = true; }
         if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false)) { g_page = (g_page + 1) % PAGE_COUNT; g_focus_first = true; }
+        // Triangle twice: start the game again, so the changes that need it take effect.
+        if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp, false) && !g_restart_failed && !restart_needed().empty()) {
+            if (ui_ticks() < g_restart_until) {
+                commit();
+                g_restart_failed = ps5_restart_app() != 0;     // returns only when the system refused
+                g_restart_until = 0;
+            } else {
+                g_restart_until = ui_ticks() + 4000;
+            }
+        }
     }
 
     ImGui::SetNextWindowPos(ImVec2(x, y));
@@ -624,6 +656,7 @@ UiResult ui_draw(UiMode, float x, float y, float width, float height)
     if (ImGui::IsWindowAppearing()) {
         g_focus_first = true;
         g_reset_until = 0;
+        g_restart_until = 0;
     }
     {
         // The game's red along the top edge.

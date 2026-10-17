@@ -45,7 +45,7 @@ Two packs, downloaded separately:
 | Pack | What it changes | Download |
 |---|---|---|
 | Faithful HD | Fighters, venues and crowds, upscaled 4x from the originals | [Google Drive](https://drive.google.com/file/d/1peMSkiT_GaXe6k6TfbnxDvxJ8F3WaAtJ/view?usp=sharing) |
-| HD Menus | The menus and HUD, with upscaling | *Coming soon* |
+| HD Menus | The menus and HUD, with upscaling | [Google Drive](https://drive.google.com/file/d/1A6g6YUGp0BZ2nns9RzCkiWv3AeHCLOcI/view?usp=sharing) |
 
 Unzip them and copy the folders into the app's `mods` folder:
 

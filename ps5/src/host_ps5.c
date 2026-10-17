@@ -403,6 +403,43 @@ const char *ps5_root(void)
 const char *ps5_game_dir(void) { ps5_root(); return s_game_dir; }
 const char *ps5_game_xbe(void) { ps5_root(); return s_game_xbe; }
 
+/* ── Early crash report ──────────────────────────────────────────────────
+ * Until the game installs its own fault handler (main.c), a crash would end
+ * the app with nothing in the log. This one says where: the faulting
+ * instruction as an offset into the program, which the build's symbols name. */
+#include <signal.h>
+
+int host_posix_run(int (*game_main)(void));
+
+static void early_fault(int sig, siginfo_t *si, void *uctx)
+{
+    uintptr_t pc = mmio_trap_pc(uctx);
+    uintptr_t self = (uintptr_t)&host_posix_run;
+    char msg[200];
+    fprintf(stderr, "[PS5] early crash: signal %d at pc 0x%llx (host_posix_run is at 0x%llx), "
+                    "address 0x%llx, thread %p\n", sig, (unsigned long long)pc,
+            (unsigned long long)self, (unsigned long long)(uintptr_t)si->si_addr,
+            (void *)pthread_self());
+    snprintf(msg, sizeof msg, "Def Jam crashed early (signal %d). Send logs/defjam.log.err.", sig);
+    ps5_notify(msg);
+    sleep(2);
+    _exit(1);
+}
+
+static void early_fault_handler(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = early_fault;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
+}
+
 /* ── Start-up ──────────────────────────────────────────────────────────── */
 
 static int (*s_game_main)(void);
@@ -411,6 +448,7 @@ static int s_game_result;
 static void *game_thread(void *unused)
 {
     (void)unused;
+    fprintf(stderr, "[PS5] game thread started\n");
     s_game_result = s_game_main();
     return NULL;
 }
@@ -445,6 +483,8 @@ int host_posix_run(int (*game_main)(void))
     setvbuf(stderr, NULL, _IONBF, 0);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
+    early_fault_handler();
+    fprintf(stderr, "[PS5] host_posix_run is at %p\n", (void *)&host_posix_run);
     {   /* The decoder for trapped device registers reads instructions from
          * this copy: code itself is execute-only here (mmio_trap.h). */
         char code[300];

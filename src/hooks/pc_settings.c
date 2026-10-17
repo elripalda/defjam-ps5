@@ -475,6 +475,9 @@ int pc_settings_init(void)
     int have_game = find_game_root();
     int have_root, read;
 
+#if defined(__PROSPERO__)
+    fprintf(stderr, "[PS5] settings: found the game files\n");
+#endif
     if (have_game)
         open_log_if_needed();
     if (!have_game) {
@@ -486,7 +489,13 @@ int pc_settings_init(void)
         return 0;
     }
     supply_runtime_defaults();
+#if defined(__PROSPERO__)
+    fprintf(stderr, "[PS5] settings: runtime defaults set\n");
+#endif
     have_root = find_data_root(root, sizeof(root));
+#if defined(__PROSPERO__)
+    fprintf(stderr, "[PS5] settings: data folder found\n");
+#endif
 
     if (env && !_stricmp(env, "none")) {
         g_path[0] = 0;
@@ -503,6 +512,9 @@ int pc_settings_init(void)
         pc_input_settings(g_settings + DISPLAY_SETTING_COUNT, 64);
     g_setting_count += pc_ui_settings(g_settings + g_setting_count, 16);
     recomp_settings_register(g_settings, g_setting_count);
+#if defined(__PROSPERO__)
+    fprintf(stderr, "[PS5] settings: settings registered\n");
+#endif
     recomp_settings_set_log(settings_log);
     read = g_path[0] ? recomp_settings_load(g_path) : 0;
     if (!g_path[0])

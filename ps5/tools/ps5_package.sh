@@ -110,7 +110,7 @@ cat > "$app/sce_sys/param.json" <<EOF
   "gameIntent": { "permittedIntents": [ { "intentType": "launchActivity" } ] },
   "localizedParameters": {
     "defaultLanguage": "en-US",
-    "en-US": { "titleName": "DEF JAM: FIGHT FOR NY REMASTERED" }
+    "en-US": { "titleName": "Def Jam: Fight for NY REMASTERED" }
   },
   "masterVersion": "01.00",
   "pubtools": { "creationDate": "2026-10-16 00:00:00", "loudnessSnd0": "-28.00", "toolVersion": "2.00" },

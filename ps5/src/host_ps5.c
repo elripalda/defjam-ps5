@@ -421,12 +421,8 @@ void ps5_notify(const char *text)
     sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 }
 
-/* The earliest point the app's own code runs: if this message never shows,
- * the console did not load the program at all. */
-__attribute__((constructor(101))) static void ps5_loaded(void)
-{
-    ps5_notify("Def Jam (PS5 test build) loaded");
-}
+/* No message when the app starts: only when something stops it (ps5_fatal,
+ * the crash handlers, main.c's fatal path). */
 
 static void ps5_fatal(const char *message)
 {
@@ -957,11 +953,6 @@ int host_posix_run(int (*game_main)(void))
     const char *root = ps5_root();
     struct stat st;
 
-    {
-        char msg[300];
-        snprintf(msg, sizeof msg, "Def Jam is starting (app folder: %s)", root);
-        ps5_notify(msg);
-    }
     /* chdir does not take in an app on every firmware (FIFA Street ignores
      * its result too): every path below is absolute instead. */
     (void)chdir(root);

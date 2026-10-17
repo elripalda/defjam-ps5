@@ -571,7 +571,7 @@ int pc_settings_init(void)
         /* [ps5 port] A settings.ini written by an earlier build holds that
          * build's defaults (4:3, twice the console's resolution), which win
          * over new ones. Once per new set: bring it up to this build's. */
-        enum { PS5_DEFAULTS = 23 };
+        enum { PS5_DEFAULTS = 24 };
         int had = recomp_settings_get("ps5", "defaults", 0);
         if (had < 22)       /* the border beside 4:3 menus */
             recomp_settings_set("display", "widescreen_side_fill", DEFAULT_SIDE_FILL);
@@ -579,6 +579,8 @@ int pc_settings_init(void)
             recomp_settings_set("textures", "enabled", 1);
             recomp_settings_set("display", "border", 0);
         }
+        if (had < 24)       /* no buzz when the game starts */
+            recomp_settings_set("input", "rumble_on_connect", 0);
         if (had < 21) {
             recomp_settings_set("display", "aspect", DEFAULT_ASPECT);
             recomp_settings_set("display", "render_scale", DEFAULT_RENDER_SCALE);

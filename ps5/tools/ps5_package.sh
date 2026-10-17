@@ -14,7 +14,7 @@ set -euo pipefail
 
 build=$(realpath "${1:?cmake build dir}")
 tri=$(realpath "${2:?ps5-plume-triangle checkout}")
-title_id=${3:-PPSA92004}
+title_id=${3:-PPSA92046}
 port=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 
 sdk_root=${PS5_PAYLOAD_SDK:-$tri/.deps/native/ps5-payload-sdk}

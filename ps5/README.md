@@ -1,11 +1,11 @@
 # Def Jam: Fight for NY for PS5
 
-A native PS5 homebrew build of Def Jam: Fight for NY, from vyanhursky's static recompilation of the original Xbox game. Title ID PPSA92004.
+A native PS5 homebrew build of Def Jam: Fight for NY, from vyanhursky's static recompilation of the original Xbox game. Title ID PPSA92046.
 
 ## Install
 
-1. Copy the `PPSA92004` folder to `/data/homebrew/` on your PS5.
-2. Copy everything from your own extracted **USA Xbox** disc into `PPSA92004/GameData`: `default.xbe`, the `.xml` files and the `assets`, `audio`, `fonts`, `motion`, `movies` and `screens` folders.
+1. Copy the `PPSA92046` folder to `/data/homebrew/` on your PS5.
+2. Copy everything from your own extracted **USA Xbox** disc into `PPSA92046/GameData`: `default.xbe`, the `.xml` files and the `assets`, `audio`, `fonts`, `motion`, `movies` and `screens` folders.
 3. Launch it from your homebrew launcher.
 
 Saves, `settings.ini` and the log (`logs/defjam.log.err`) are kept in the app folder.
@@ -23,7 +23,7 @@ cmake -S . -B build/ps5 -G Ninja -DCMAKE_TOOLCHAIN_FILE=ps5/cmake/ps5-toolchain.
   -DCMAKE_BUILD_TYPE=Release -DPS5_PAYLOAD_SDK=<sdk> -DDEFJAM_PS5_PREFIX=<prefix> \
   -DFETCHCONTENT_SOURCE_DIR_IMGUI=<imgui v1.92.9b>
 ninja -C build/ps5 defjam_recomp
-ps5/tools/ps5_package.sh build/ps5 <ps5-plume-triangle> PPSA92004
+ps5/tools/ps5_package.sh build/ps5 <ps5-plume-triangle> PPSA92046
 ```
 
 ## What's different on PS5

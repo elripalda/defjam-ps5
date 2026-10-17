@@ -5,7 +5,7 @@
  * handed to SDL as a gamepad, where the input layer (input_host.c) picks it up
  * like any other pad.
  *
- * The app lives in /data/homebrew/PPSA92004; the player's own extracted disc
+ * The app lives in /data/homebrew/PPSA92046; the player's own extracted disc
  * goes in its GameData folder. Saves, settings.ini and the log are kept beside
  * it.
  */
@@ -29,12 +29,12 @@
 #include "hooks/pc_settings.h"
 
 /* The app's own folder as the app sees it (the same folder as
- * /data/homebrew/PPSA92004 when installed there): the process cannot rely on
+ * /data/homebrew/PPSA92046 when installed there): the process cannot rely on
  * reaching /data, and starts somewhere read-only. */
 #ifndef DEFJAM_PS5_ROOT
 #define DEFJAM_PS5_ROOT "/app0"
 #endif
-#define DEFJAM_PS5_ROOT_ALT "/data/homebrew/PPSA92004"
+#define DEFJAM_PS5_ROOT_ALT "/data/homebrew/PPSA92046"
 
 /* ── PS5 system calls ──────────────────────────────────────────────────── */
 
@@ -379,7 +379,7 @@ static void ps5_fatal(const char *message)
 /* ── Paths ─────────────────────────────────────────────────────────────── */
 
 /* The app's folder, found by looking for its eboot.bin: /app0 is how an app
- * sees its own folder, and /data/homebrew/PPSA92004 is where it is installed. */
+ * sees its own folder, and /data/homebrew/PPSA92046 is where it is installed. */
 static char s_root[256], s_game_dir[300], s_game_xbe[320];
 
 const char *ps5_root(void)
@@ -666,7 +666,7 @@ static void *flush_thread(void *unused)
 
 static void *heartbeat_thread(void *unused)
 {
-    unsigned secs = 0, step = 5;
+    unsigned secs = 0, step = 10;
     struct sigaction sa;
     pthread_t fl;
     (void)unused;
@@ -683,7 +683,7 @@ static void *heartbeat_thread(void *unused)
         ps5_logf("[PS5] %u s: kernel calls %lld, guest calls %llu, frames %u, %d guest thread(s)\n",
                  secs, xbox_kernel_call_count(), (unsigned long long)g_icall_count,
                  g_vk_frames_presented, (int)s_guest_thread_count);
-        if (secs <= 60 || secs % 60 == 0)
+        if (secs == 30 || secs % 120 == 0)
             sample_guest_threads();
         if (secs >= 60)
             step = 30;
@@ -741,7 +741,7 @@ int host_posix_run(int (*game_main)(void))
         char code[300];
         snprintf(code, sizeof code, "%s/code.bin", root);
         if (mmio_trap_load_code(code) != 0)
-            ps5_fatal("Def Jam: code.bin is missing from the app folder. Copy the whole PPSA92004 folder again.");
+            ps5_fatal("Def Jam: code.bin is missing from the app folder. Copy the whole PPSA92046 folder again.");
         fprintf(stderr, "[PS5] code copy loaded from %s\n", code);
     }
     if (stat(ps5_game_xbe(), &st) != 0) {

@@ -613,8 +613,16 @@ static int host_main(void)
      * start-up -- the chattiest phase -- the title crawled at a frame every
      * second or so in some runs, with most of its threads queued on that lock
      * behind two writers doing single-character system calls. */
+#if defined(__PROSPERO__)
+    /* [ps5 port] Unbuffered while the port is brought up: the console ends a
+     * process that breaks its rules (SYSTEM_XO_VIOLATION and the like)
+     * without a signal, and a buffered log would lose its last lines. */
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+#else
     setvbuf(stdout, NULL, _IOFBF, 1 << 16);
     setvbuf(stderr, NULL, _IOFBF, 1 << 16);
+#endif
 
     /* Find the game folder, open a log if nothing captures the output, supply
      * the runtime's required switches and load settings.ini -- before anything

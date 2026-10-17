@@ -441,6 +441,8 @@ int host_posix_run(int (*game_main)(void))
         ps5_notify("Def Jam can't write its log (logs folder in the app folder)");
     snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);
     freopen(log, "w", stderr);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
     {   /* The decoder for trapped device registers reads instructions from

@@ -585,5 +585,125 @@
    23,
    22
   ]
+ },
+ {
+  "id": "53eb6bb8e09c03e7af571c5920cbd2366d114c3a36734464e14b2f08b348fa4a",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "L2",
+  "red": 0,
+  "box": [
+   18,
+   23,
+   38,
+   39
+  ],
+  "mirror": false
+ },
+ {
+  "id": "3a724e70af2ee83899fcbb3cb44b4554c20c3eebc7f49687ca175dec1d0fe10f",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "L2",
+  "red": 1,
+  "box": [
+   18,
+   23,
+   38,
+   39
+  ],
+  "mirror": false
+ },
+ {
+  "id": "b25237ed6fe371081a891784b947449371f2c31faf9c400ab08ae8cd19c8f5cb",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "L2",
+  "red": 0,
+  "box": [
+   18,
+   23,
+   38,
+   39
+  ],
+  "mirror": false
+ },
+ {
+  "id": "ea073596e267b19b6f38ef703eaec8d4a5473fbb2475787c6a15e8859e0210e9",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "L2",
+  "red": 1,
+  "box": [
+   18,
+   23,
+   38,
+   39
+  ],
+  "mirror": false
+ },
+ {
+  "id": "56bc8e759d26ed97cdd8cbbd21be09c8c7df47a289258df7369a43353a5e2da2",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "R2",
+  "red": 0,
+  "box": [
+   1,
+   23,
+   21,
+   39
+  ],
+  "mirror": true
+ },
+ {
+  "id": "a55761c9c291c2c0de86d0aec46289eeefaa93164924392e36a91d37d8f9444b",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "R2",
+  "red": 1,
+  "box": [
+   1,
+   23,
+   21,
+   39
+  ],
+  "mirror": true
+ },
+ {
+  "id": "970f16db5c522254b0406bef90195f93d9fea5e4be3deaa1524a59b1931910ad",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "R2",
+  "red": 0,
+  "box": [
+   1,
+   23,
+   21,
+   39
+  ],
+  "mirror": true
+ },
+ {
+  "id": "a9455dd81d009bb1bef1280a0e780db7ad03c754c7b163b05b0132e5a27850e8",
+  "w": 64,
+  "h": 64,
+  "kind": "rotate",
+  "label": "R2",
+  "red": 1,
+  "box": [
+   1,
+   23,
+   21,
+   39
+  ],
+  "mirror": true
  }
 ]

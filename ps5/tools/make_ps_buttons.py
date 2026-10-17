@@ -148,6 +148,54 @@ def shoulder(e):
     return img
 
 
+def rotate(e):
+    """The wardrobe's turn-the-fighter icon: a curved arrow and an L2/R2 label (red edge when lit)."""
+    f = SCALE * SS
+    size = (e["w"] * f, e["h"] * f)
+    img = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    # The arrow, drawn for the left icon and mirrored for the right one.
+    cx, cy, r, t, o = 17 * f, 21 * f, 10.5 * f, 6 * f, 1.2 * f
+    a0, a1 = 88, 318
+    outline, body = EDGE, (205, 205, 205, 255)
+    # PIL draws an arc's width inwards from its box: the box is the outer edge.
+    for width, edge_r, colour, ends in ((t + 2 * o, r + t / 2 + o, outline, 4), (t, r + t / 2, body, 0)):
+        d.arc([cx - edge_r, cy - edge_r, cx + edge_r, cy + edge_r], a0 - ends, a1, fill=colour, width=int(width))
+    end = math.radians(a1)
+    ex, ey = cx + r * math.cos(end), cy + r * math.sin(end)
+    tx, ty = -math.sin(end), math.cos(end)                 # direction of travel at the end
+    nx, ny = math.cos(end), math.sin(end)
+    head, half = 7 * f, 6.5 * f
+    tip = (ex + tx * head, ey + ty * head)
+    left = (ex + nx * (half + t * 0.15), ey + ny * (half + t * 0.15))
+    right = (ex - nx * (half + t * 0.15), ey - ny * (half + t * 0.15))
+    d.polygon([tip, left, right], fill=outline)
+    shrink = 1.3 * f
+    def towards(p, q, k):
+        return (p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k)
+    centre = ((tip[0] + left[0] + right[0]) / 3, (tip[1] + left[1] + right[1]) / 3)
+    k = 1 - shrink / max(1.0, math.dist(tip, centre))
+    d.polygon([towards(centre, tip, k), towards(centre, left, k), towards(centre, right, k)], fill=body)
+    if e.get("mirror"):
+        # Mirrored about the middle of the two labels (x 28 and x 11), not the picture's middle.
+        flipped = img.transpose(Image.FLIP_LEFT_RIGHT)
+        img = Image.new("RGBA", size, (0, 0, 0, 0))
+        img.paste(flipped, (-(e["w"] - 39) * f, 0))
+    # The label.
+    x0, y0, x1, y1 = [v * f for v in e["box"]]
+    h = y1 - y0
+    d = ImageDraw.Draw(img)
+    edge = (205, 22, 40, 255) if e.get("red") else EDGE
+    d.rounded_rectangle([x0, y0, x1, y1], radius=h * 0.24, fill=edge)
+    tt = h * (0.14 if e.get("red") else 0.09)
+    img.alpha_composite(white_fill(size, [x0 + tt, y0 + tt, x1 - tt, y1 - tt], rounded=h * 0.18))
+    d = ImageDraw.Draw(img)
+    ft = font(int(h * 0.58))
+    l, top, rr, bottom = d.textbbox((0, 0), e["label"], font=ft)
+    d.text(((x0 + x1) / 2 - (l + rr) / 2, (y0 + y1) / 2 - (top + bottom) / 2), e["label"], font=ft, fill=INK)
+    return img
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
@@ -156,7 +204,7 @@ def main():
     os.makedirs(os.path.join(out, "textures"), exist_ok=True)
     lines = ["[pack]", "schema=1", "name=PlayStation buttons", "[textures]"]
     for e in spec:
-        img = face(e) if e["kind"] == "face" else shoulder(e)
+        img = face(e) if e["kind"] == "face" else rotate(e) if e["kind"] == "rotate" else shoulder(e)
         img = img.resize((e["w"] * SCALE, e["h"] * SCALE), Image.LANCZOS)
         img.save(os.path.join(out, "textures", e["id"] + ".png"), optimize=True)
         lines.append("%s=textures/%s.png" % (e["id"], e["id"]))

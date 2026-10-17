@@ -20,6 +20,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "host.h"
 #include <stdio.h>
+#if defined(__PROSPERO__)
+#include <dirent.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -606,13 +609,41 @@ int pc_settings_init(void)
              * chosen) and the owner's art in custom/, listed last so it wins. Then the text (ps5_text.c). */
             extern void ps5_text_prepare(int playstation);
             int playstation = recomp_settings_get("ui", "button_style", 0) == 0;
-            if (!getenv("RECOMP_TEXTURE_PACKS"))
-                _putenv_s("RECOMP_TEXTURE_PACKS", playstation ? "playstation;custom" : "custom");
+            if (!getenv("RECOMP_TEXTURE_PACKS")) {
+                /* Every folder in mods/ is a pack: playstation first, then the others (HD packs)
+                 * in name order, then custom, so the owner's own pictures win. */
+                char list[1024] = "", names[32][64], dir[MAX_PATH];
+                int n = 0, i, j;
+                DIR *d;
+                struct dirent *ent;
+                const char *data = getenv("DEFJAM_DATA");
+                snprintf(dir, sizeof dir, "%s/mods", data && *data ? data : ".");
+                if ((d = opendir(dir)) != NULL) {
+                    while ((ent = readdir(d)) != NULL && n < 32) {
+                        if (ent->d_name[0] == '.' || !strcmp(ent->d_name, "playstation") ||
+                            !strcmp(ent->d_name, "custom") || strlen(ent->d_name) >= sizeof names[0])
+                            continue;
+                        snprintf(names[n++], sizeof names[0], "%s", ent->d_name);
+                    }
+                    closedir(d);
+                }
+                for (i = 1; i < n; i++)
+                    for (j = i; j > 0 && strcmp(names[j - 1], names[j]) > 0; j--) {
+                        char t[64];
+                        memcpy(t, names[j], sizeof t); memcpy(names[j], names[j - 1], sizeof t); memcpy(names[j - 1], t, sizeof t);
+                    }
+                if (playstation)
+                    strcat(list, "playstation;");
+                for (i = 0; i < n; i++) {
+                    strncat(list, names[i], sizeof list - strlen(list) - 2);
+                    strcat(list, ";");
+                }
+                strcat(list, "custom");
+                _putenv_s("RECOMP_TEXTURE_PACKS", list);
+                fprintf(stderr, "[SETTINGS] texture packs: %s\n", list);
+            }
             if (!getenv("RECOMP_TEXTURE_CACHE_MB"))
-                _putenv_s("RECOMP_TEXTURE_CACHE_MB", "256");
-            /* For finding a picture's id: each big texture the game draws, once, in the log. */
-            if (!getenv("RECOMP_TEXTURE_LOG_SEEN"))
-                _putenv_s("RECOMP_TEXTURE_LOG_SEEN", "1");
+                _putenv_s("RECOMP_TEXTURE_CACHE_MB", "512");
             ps5_text_prepare(playstation);
         }
 #endif

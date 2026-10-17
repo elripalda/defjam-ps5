@@ -38,7 +38,7 @@ static const char *const k_aspect[] = { "4:3", "stretch", "widescreen (auto)", "
 static const char *const k_filter[] = { "smooth", "sharp", NULL };
 static const char *const k_ws_hud[] = { "auto", "edges", "centered", NULL };
 static const char *const k_ws_cutscenes[] = { "authored", "fill", NULL };
-static const char *const k_ws_fill[] = { "blur", "black", NULL };
+static const char *const k_ws_fill[] = { "blur", "black", "border", NULL };
 
 /* A four-fighter match holds about 2 GiB of replacements. At 512 MiB the cache evicted and
  * re-decoded dozens of textures every two seconds in a fight on the Steam Deck. */
@@ -48,9 +48,11 @@ static const char *const k_ws_fill[] = { "blur", "black", NULL };
  * times the console's resolution (3413x1920 in 16:9) for a 3840x2160 output. */
 #define DEFAULT_ASPECT 3        /* 16:9 */
 #define DEFAULT_RENDER_SCALE 4
+#define DEFAULT_SIDE_FILL 2     /* border: the Vulkan renderer draws no blur */
 #else
 #define DEFAULT_ASPECT 0        /* 4:3 */
 #define DEFAULT_RENDER_SCALE 2
+#define DEFAULT_SIDE_FILL 0     /* blur */
 #endif
 static RecompSetting g_display_settings[] = {
     { "textures", "enabled", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
@@ -75,8 +77,11 @@ static RecompSetting g_display_settings[] = {
       "Where the fight HUD goes in widescreen: the screen edges, or a centred 16:9 box (auto: edges up to 16:9)." },
     { "display", "widescreen_cutscenes", RECOMP_SETTING_ENUM, 0, 0, 0, k_ws_cutscenes, NULL, RECOMP_SETTING_RESTART,
       "Story cutscenes in widescreen: authored keeps the game's own 16:9 framing, fill always fills the screen." },
-    { "display", "widescreen_side_fill", RECOMP_SETTING_ENUM, 0, 0, 0, k_ws_fill, NULL, RECOMP_SETTING_RESTART,
-      "Beside 4:3 pictures (movies, menu backgrounds) in widescreen: a soft blurred extension, or black." },
+    { "display", "widescreen_side_fill", RECOMP_SETTING_ENUM, DEFAULT_SIDE_FILL, 0, 0, k_ws_fill, NULL,
+      RECOMP_SETTING_RESTART,
+      "Beside 4:3 pictures (menus, movies, loading screens) in widescreen: a soft blurred extension, black, or a "
+      "border picture (borders/border.png in the game's folder), which goes away as soon as the game draws its "
+      "own 3D there." },
     { "display", "widescreen_fov_cap", RECOMP_SETTING_INT, 150, 90, 170, NULL, NULL, RECOMP_SETTING_RESTART,
       "Widest horizontal field of view widescreen may use, in degrees (only very wide screens reach it)." },
     { "display", "render_scale", RECOMP_SETTING_INT, DEFAULT_RENDER_SCALE, 1, 4, NULL, "RECOMP_RENDER_SCALE",
@@ -554,13 +559,20 @@ int pc_settings_init(void)
         /* [ps5 port] A settings.ini written by an earlier build holds that
          * build's defaults (4:3, twice the console's resolution), which win
          * over new ones. Once per new set: bring it up to this build's. */
-        enum { PS5_DEFAULTS = 21 };
-        if (recomp_settings_get("ps5", "defaults", 0) < PS5_DEFAULTS) {
+        enum { PS5_DEFAULTS = 22 };
+        int had = recomp_settings_get("ps5", "defaults", 0);
+        if (had < PS5_DEFAULTS) {
+            /* Set 22: the border beside 4:3 menus (blur is not drawn on the console). */
+            recomp_settings_set("display", "widescreen_side_fill", DEFAULT_SIDE_FILL);
+        }
+        if (had < 21) {
             recomp_settings_set("display", "aspect", DEFAULT_ASPECT);
             recomp_settings_set("display", "render_scale", DEFAULT_RENDER_SCALE);
             recomp_settings_set("display", "output_4k", 1);
             recomp_settings_set("ui", "show_fps", 1);
             recomp_settings_set_text("ui", "overlay_pad", "left_stick_click+right_stick_click");
+        }
+        if (had < PS5_DEFAULTS) {
             recomp_settings_set("ps5", "defaults", PS5_DEFAULTS);
             if (g_path[0] && recomp_settings_save(g_path) == 0)
                 fprintf(stderr, "[SETTINGS] brought up to the console's defaults (set %d)\n", PS5_DEFAULTS);

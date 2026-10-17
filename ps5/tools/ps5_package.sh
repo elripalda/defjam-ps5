@@ -141,6 +141,29 @@ TXT
 else
     echo "warning: no Roboto font found; the in-game menu uses Dear ImGui's built-in one" >&2
 fi
+# The border beside 4:3 menus (display.widescreen_side_fill = border); replaceable.
+# ps5/assets is not tracked; the default picture is made by ps5/tools/make_border.py.
+if [[ ! -f $port/ps5/assets/borders/border.png ]]; then
+    mkdir -p "$port/ps5/assets/borders"
+    python3 "$port/ps5/tools/make_border.py" "$port/ps5/assets/borders/border.png" \
+        || echo "warning: could not make the default border (needs numpy and Pillow)" >&2
+fi
+if [[ -f $port/ps5/assets/borders/border.png ]]; then
+    mkdir -p "$app/borders"
+    cp "$port/ps5/assets/borders/border.png" "$app/borders/"
+    cat > "$app/borders/README.txt" <<'TXT'
+border.png fills the black bars beside the game's 4:3 picture in menus, movies
+and loading screens. It goes away on its own once a fight or cutscene starts.
+
+To use your own: save a 3840x2160 PNG (or JPEG) here as border.png, replacing
+this one. The game covers the middle 2880 pixels, so only the left 480 and
+right 480 pixels show. Leave the middle empty or fill it, it doesn't matter.
+Other sizes work too; the picture is stretched to the screen.
+
+Turn it off in the in-game menu (L3+R3): Display, "Beside 4:3 pictures",
+set to black.
+TXT
+fi
 mkdir -p "$app/GameData"
 cat > "$app/GameData/PUT GAME FILES HERE.txt" <<'TXT'
 Copy everything from your extracted Def Jam: Fight for NY (USA) Xbox disc into

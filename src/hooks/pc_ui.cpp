@@ -525,7 +525,9 @@ static void page_display()
     if (recomp_settings_get("display", "aspect", 0) >= 2) {
         ImGui::Indent();
         settings_group("display", { "widescreen_hud", "widescreen_cutscenes", "widescreen_side_fill" });
-        ImGui::TextWrapped("Widescreen: the 3D view gets wider; menus, the HUD and movies keep their shape.");
+        ImGui::TextWrapped("Widescreen: the 3D view gets wider; menus, the HUD and movies keep their shape. "
+                           "Border puts borders/border.png (in the game's folder) beside them; swap in your own "
+                           "3840x2160 picture to change it.");
         ImGui::Unindent();
     }
     settings_group("display", { "filter" });
@@ -975,6 +977,7 @@ namespace {
 std::atomic<bool> g_open(false);
 std::atomic<bool> g_toggle(false);
 std::atomic<bool> g_show_fps(false);    // [ui] show_fps: the frame counter, drawn even with the overlay closed
+std::atomic<bool> g_border_mode(false); // [display] widescreen_side_fill = border (drawn by the Vulkan overlay)
 bool g_just_opened = false;
 bool g_ready = false;               // the context and backends exist (under the lock)
 #if defined(_WIN32)
@@ -1064,6 +1067,7 @@ extern "C" void pc_ui_apply_settings(void)
     g_overlay_vk = vk > 0 ? vk : VK_F1;
     parse_chords();
     g_show_fps = recomp_settings_get("ui", "show_fps", 0) != 0;
+    g_border_mode = recomp_settings_get("display", "widescreen_side_fill", 0) == 2;
     if (g_ready) ui_apply_scale(g_window);
     ui_unlock();
 }
@@ -1268,10 +1272,183 @@ void ui_sdl_frame(float width, float height, float framebuffer_scale)
 // ---- the overlay, drawn by the toolkit's Vulkan present --------------------------------------------------------------
 
 #include "d3d8_vk.h"
+#include "imgui_internal.h"   // ImGui::RegisterUserTexture, for the border picture
+
+#include <math.h>
+#include <pthread.h>
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+#include "../../tools/xboxrecomp/src/nv2a/stb/stb_image.h"
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+extern "C" float ws_k(void);                    // src/patches/widescreen.c
+extern "C" uint32_t nv2a_ws_boxed_frames(void); // the toolkit's NV2A executor
+extern "C" uint32_t nv2a_ws_wide_frames(void);
+#if defined(__PROSPERO__)
+extern "C" void ps5_off_guest_cpu(void);        // ps5/src/host_ps5.c
+#endif
 
 namespace {
 
 uint32_t g_vk_generation;
+
+// ---- the border beside the 4:3 picture ----------------------------------------------------------------------------
+// [display] widescreen_side_fill = border. A picture, borders/border.png in the data folder, fills the side
+// areas whenever the title draws nothing there (a 2D menu, a movie, a loading screen) and fades out as soon as it
+// does (a fight, a cutscene, a menu over a 3D room). With the 4:3 picture shape it fills the bars beside the picture
+// all the time. The image is laid over the whole screen and only what lies beside the picture shows, so a 16:9
+// image drawn for the TV lines up as it was drawn.
+struct Border {
+    std::atomic<int> state{0};          // 0 not read, 1 reading, 2 read, 3 none (missing or unreadable)
+    unsigned char *pixels = nullptr;    // the image (RGBA), until its strips are in the texture
+    int w = 0, h = 0;
+    ImTextureData tex;                  // the left and right strips side by side
+    bool made = false;
+    float u_left = 0.0f, u_right = 0.0f;    // where the left strip ends and the right one starts, in the texture
+    bool on = false;
+    float alpha = 0.0f;
+    unsigned changes = 0;
+};
+Border g_border;
+
+std::string border_path()
+{
+    const char *root = getenv("DEFJAM_DATA");
+#if defined(__PROSPERO__)
+    return std::string(root ? root : "/app0") + "/borders/border.png";
+#else
+    return std::string(root ? root : ".") + "/borders/border.png";
+#endif
+}
+
+void *border_read(void *)
+{
+#if defined(__PROSPERO__)
+    ps5_off_guest_cpu();                // started from the title's present: off its CPU before the work
+#endif
+    std::string path = border_path();
+    unsigned long long t0 = SDL_GetTicksNS();
+    int w = 0, h = 0, n = 0;
+    unsigned char *px = stbi_load(path.c_str(), &w, &h, &n, 4);
+    if (!px || w < 16 || h < 16) {
+        fprintf(stderr, "[UI] no border picture at %s (%s)\n", path.c_str(), px ? "too small" : stbi_failure_reason());
+        if (px) stbi_image_free(px);
+        g_border.state = 3;
+        return nullptr;
+    }
+    g_border.pixels = px;
+    g_border.w = w;
+    g_border.h = h;
+    fprintf(stderr, "[UI] border picture %dx%d read in %.0f ms\n", w, h, (SDL_GetTicksNS() - t0) / 1e6);
+    g_border.state = 2;
+    return nullptr;
+}
+
+void border_start_read()
+{
+    int idle = 0;
+    if (!g_border.state.compare_exchange_strong(idle, 1)) return;
+    pthread_attr_t attr;
+    pthread_t thread;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 512 * 1024);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&thread, &attr, border_read, nullptr) != 0) {
+        fprintf(stderr, "[UI] could not start reading the border picture\n");
+        g_border.state = 3;
+    }
+    pthread_attr_destroy(&attr);
+}
+
+// Once a present: whether the border should show, and its fade. True while any of it is on screen.
+bool border_tick()
+{
+    if (!g_border_mode.load()) {
+        g_border.on = false;
+        g_border.alpha = 0.0f;
+        return false;
+    }
+    int state = g_border.state.load();
+    if (state == 0) border_start_read();
+    if (state != 2) return false;
+    bool was = g_border.on;
+    float k = ws_k();
+    if (!(k < 1.0f))
+        g_border.on = true;             // the 4:3 shape: what is beside the picture is never the title's
+    else if (nv2a_ws_boxed_frames() >= 3)
+        g_border.on = true;
+    else if (nv2a_ws_wide_frames() >= 2)
+        g_border.on = false;
+    if (g_border.on != was && g_border.changes++ < 40)
+        fprintf(stderr, "[UI] border %s\n", g_border.on ? "shown" : "hidden");
+    // In over about a quarter of a second, out twice as fast so the game's own sides are not covered for long.
+    g_border.alpha += g_border.on ? 1.0f / 15.0f : -1.0f / 7.0f;
+    if (g_border.alpha < 0.0f) g_border.alpha = 0.0f;
+    if (g_border.alpha > 1.0f) g_border.alpha = 1.0f;
+    return g_border.alpha > 0.0f;
+}
+
+// Cut the parts of the image that show beside the box (x0..x1 of a window w wide) into one texture.
+bool border_make(int x0, int x1, int w)
+{
+    if (g_border.made) return true;
+    if (!g_border.pixels) return false;
+    int iw = g_border.w, ih = g_border.h;
+    double fl = x0 > 0 ? (double)x0 / w : 0.0, fr = x1 < w ? (double)(w - x1) / w : 0.0;
+    int lc = fl > 0.0 ? (int)ceil(fl * iw) + 1 : 0, rc = fr > 0.0 ? (int)ceil(fr * iw) + 1 : 0;
+    if (lc > iw) lc = iw;
+    if (rc > iw) rc = iw;
+    int tw = lc + rc;
+    if (tw <= 0) return false;
+    g_border.tex.Create(ImTextureFormat_RGBA32, tw, ih);
+    for (int y = 0; y < ih; y++) {
+        unsigned char *dst = (unsigned char *)g_border.tex.GetPixelsAt(0, y);
+        const unsigned char *src = g_border.pixels + (size_t)y * iw * 4;
+        memcpy(dst, src, (size_t)lc * 4);
+        memcpy(dst + (size_t)lc * 4, src + (size_t)(iw - rc) * 4, (size_t)rc * 4);
+    }
+    g_border.tex.UseColors = true;
+    ImGui::RegisterUserTexture(&g_border.tex);
+    g_border.u_left = (float)(fl * iw / tw);
+    g_border.u_right = (float)((lc + (rc - fr * iw)) / tw);
+    stbi_image_free(g_border.pixels);
+    g_border.pixels = nullptr;
+    g_border.made = true;
+    fprintf(stderr, "[UI] border ready: %d + %d columns of the picture beside x %d..%d\n", lc, rc, x0, x1);
+    return true;
+}
+
+void border_draw(ImDrawList *dl, const D3D8VkOverlayFrame *f)
+{
+    if (g_border.alpha <= 0.0f) return;
+    float k = ws_k();
+    if (!(k > 0.0f && k < 1.0f)) k = 1.0f;
+    float pw = (float)(f->picture_x1 - f->picture_x0), cx = (f->picture_x0 + f->picture_x1) * 0.5f;
+    int w = (int)f->width, h = (int)f->height;
+    int x0 = (int)floorf(cx - pw * k * 0.5f + 0.5f), x1 = (int)floorf(cx + pw * k * 0.5f + 0.5f);
+    if (pw <= 0.0f || (x0 <= 0 && x1 >= w) || !border_make(x0, x1, w)) return;
+    ImU32 col = IM_COL32(255, 255, 255, (int)(g_border.alpha * 255.0f + 0.5f));
+    ImTextureRef ref = g_border.tex.GetTexRef();
+    if (x0 > 0 && g_border.u_left > 0.0f)
+        dl->AddImage(ref, ImVec2(0, 0), ImVec2((float)x0, (float)h), ImVec2(0, 0), ImVec2(g_border.u_left, 1), col);
+    if (x1 < w && g_border.u_right < 1.0f)
+        dl->AddImage(ref, ImVec2((float)x1, 0), ImVec2((float)w, (float)h), ImVec2(g_border.u_right, 0),
+                     ImVec2(1, 1), col);
+}
 std::atomic<unsigned> g_frame_w(0), g_frame_h(0);       // what the overlay was last drawn into, in pixels
 
 #if defined(__PROSPERO__)
@@ -1314,7 +1491,8 @@ int overlay_active(void *)
     if (toggled) set_open(!g_open.load());
     bool open = g_open.load();
     ui_unlock();
-    return open || g_show_fps.load() ? 1 : 0;
+    bool border = border_tick();
+    return open || g_show_fps.load() || border ? 1 : 0;
 }
 
 // The frame counter: presents in the last half second, and the time between the last two.
@@ -1390,7 +1568,8 @@ void overlay_draw(const D3D8VkOverlayFrame *f, void *)
         g_guard_frames = -1;
     }
 #endif
-    if (!open && !fps) { ui_unlock(); return; }
+    bool border = g_border.alpha > 0.0f;
+    if (!open && !fps && !border) { ui_unlock(); return; }
     if (g_ready && f->generation != g_vk_generation) {
         // The window's image has another format: the pipelines were built for the old pass.
         ImGui_ImplVulkan_Shutdown();
@@ -1425,10 +1604,12 @@ void overlay_draw(const D3D8VkOverlayFrame *f, void *)
     ui_sdl_frame((float)f->width, (float)f->height, 1.0f);
     ImGui::NewFrame();
     ImGuiIO &io = ImGui::GetIO();
+    if (border)
+        border_draw(ImGui::GetBackgroundDrawList(), f);    // first, so the menu's dimming covers it
     if (fps)
         g_fps.draw(ImGui::GetForegroundDrawList(), io.DisplaySize);
     if (!open) {
-        // The frame counter alone: nothing to navigate, nothing dimmed.
+        // The frame counter and the border alone: nothing to navigate, nothing dimmed.
         ImGui::Render();
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), (VkCommandBuffer)f->command_buffer);
         ui_unlock();

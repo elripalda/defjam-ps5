@@ -51,6 +51,7 @@ int scePadReadState(int32_t handle, void *data);
 int scePadClose(int32_t handle);
 typedef struct { uint8_t large_motor, small_motor; } ScePadVibrationParam;
 int scePadSetVibration(int32_t handle, const ScePadVibrationParam *param);
+int scePadSetVibrationMode(int32_t handle, int32_t mode);
 
 /* The start of ScePadData, with room for the rest (verified on hardware by
  * ps5-plume-triangle and the FIFA Street port). */
@@ -164,7 +165,15 @@ static bool SDLCALL pad_rumble(void *userdata, Uint16 low, Uint16 high)
         return false;
     v.large_motor = (uint8_t)(low >> 8);
     v.small_motor = (uint8_t)(high >> 8);
-    return scePadSetVibration(p->handle, &v) == 0;
+    {
+        static unsigned logged;
+        int r = scePadSetVibration(p->handle, &v);
+        if ((v.large_motor || v.small_motor || r != 0) && logged < 6) {
+            logged++;
+            fprintf(stderr, "[PS5] rumble %u/%u -> 0x%x\n", v.large_motor, v.small_motor, (unsigned)r);
+        }
+        return r == 0;
+    }
 }
 
 /* Give every signed-in user's DualSense a gamepad. */
@@ -214,6 +223,14 @@ static void scan_pads(void)
             continue;
         slot->user = user;
         slot->handle = handle;
+        {
+            /* A DualSense opens in haptics mode, where scePadSetVibration's
+             * two motor levels do nothing (the call still succeeds): mode 2
+             * is the compatible two-motor rumble. */
+            int vr = scePadSetVibrationMode(handle, 2);
+            fprintf(stderr, "[PS5] DualSense rumble mode: %s (0x%x)\n", vr == 0 ? "two motors" : "refused",
+                    (unsigned)vr);
+        }
 
         SDL_INIT_INTERFACE(&desc);
         desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;

@@ -109,7 +109,7 @@ float ws_init(int window_w, int window_h, int fullscreen)
         fprintf(stderr, "[WS] widescreen %.4f (k %.4f), HUD %s, cutscenes %s, sides %s, FOV cap %.0f\n",
                 a, g_k, g_hud == WS_HUD_EDGE ? "edge" : "centred",
                 g_cutscenes == WS_CUTSCENES_FILL ? "fill" : "authored",
-                g_fill == WS_FILL_BLACK ? "black" : "blur", g_fov_cap);
+                g_fill == WS_FILL_BLACK ? "black" : g_fill == WS_FILL_BORDER ? "border" : "blur", g_fov_cap);
     } else {
         d3d8_present_set_canvas_aspect(0, 0);
     }

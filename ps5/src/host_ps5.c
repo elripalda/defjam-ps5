@@ -10,6 +10,8 @@
  * it.
  */
 #include <pthread.h>
+#include <sched.h>
+#include <time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -507,6 +509,73 @@ static int log_to_file(const char *path, FILE *f)
     return 0;
 }
 
+/* How long the basic things the runtime leans on take here, once at start. */
+static __thread volatile int t_bench;
+
+static double bench_us(struct timespec a, struct timespec b, int n)
+{
+    return ((b.tv_sec - a.tv_sec) * 1e9 + (b.tv_nsec - a.tv_nsec)) / 1000.0 / n;
+}
+
+static void ps5_time_basics(void)
+{
+    struct timespec a, b, c;
+    pthread_key_t key;
+    pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+    double w_err, gettime, yield, spec, tls, mtx, slp;
+    int i;
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 20; i++)
+        fprintf(stderr, "[PS5] timing line %d\n", i);
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    w_err = bench_us(a, b, 20);
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 1000; i++)
+        clock_gettime(CLOCK_MONOTONIC, &c);
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    gettime = bench_us(a, b, 1000);
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 100; i++)
+        sched_yield();
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    yield = bench_us(a, b, 100);
+
+    pthread_key_create(&key, NULL);
+    pthread_setspecific(key, &a);
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 1000; i++)
+        (void)*(volatile void **)&(void *){pthread_getspecific(key)};
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    spec = bench_us(a, b, 1000);
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 100000; i++)
+        t_bench++;
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    tls = bench_us(a, b, 100000);
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 1000; i++) {
+        pthread_mutex_lock(&m);
+        pthread_mutex_unlock(&m);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    mtx = bench_us(a, b, 1000);
+
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    for (i = 0; i < 10; i++)
+        usleep(1);
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    slp = bench_us(a, b, 10);
+
+    fprintf(stderr, "[PS5] timing (us each): log line %.1f, clock %.3f, yield %.1f,"
+            " getspecific %.3f, thread-local %.4f, mutex %.3f, usleep(1) %.1f\n",
+            w_err, gettime, yield, spec, tls, mtx, slp);
+}
+
 static int (*s_game_main)(void);
 static int s_game_result;
 
@@ -523,6 +592,8 @@ uint64_t mmio_trap_neighbour_count(void);
 static pthread_t s_guest_threads[PS5_MAX_GUEST_THREADS];
 static volatile int s_guest_thread_count;
 static volatile uintptr_t s_sample_pc, s_sample_ret;
+#define SAMPLE_STACK_WORDS 96
+static volatile uint64_t s_sample_stack[SAMPLE_STACK_WORDS];
 static volatile int s_sample_seq;
 
 void ps5_guest_thread_register(void)
@@ -538,7 +609,13 @@ static void sample_handler(int sig, siginfo_t *si, void *uctx)
     /* rip: slot 20 of the mcontext, 64 bytes in (mmio_trap.c). */
     s_sample_pc = ((uint64_t *)((uint8_t *)uctx + 64))[20];
     /* rsp: slot 23. A system call stub is a leaf; its caller is on top. */
-    s_sample_ret = *(uint64_t *)((uint64_t *)((uint8_t *)uctx + 64))[23];
+    {
+        const uint64_t *sp = (const uint64_t *)((uint64_t *)((uint8_t *)uctx + 64))[23];
+        int i;
+        s_sample_ret = sp[0];
+        for (i = 0; i < SAMPLE_STACK_WORDS; i++)
+            s_sample_stack[i] = sp[i];
+    }
     __atomic_add_fetch(&s_sample_seq, 1, __ATOMIC_SEQ_CST);
 }
 
@@ -553,21 +630,37 @@ static uintptr_t sample_thread(pthread_t t)
     return s_sample_seq == seq ? 1 : s_sample_pc;
 }
 
+/* Words on the sampled stack that point into this program's code: its
+ * callers, the last one first (a scan, so an old one can show up too). */
+static int in_image(uint64_t v)
+{
+    extern int host_posix_run(int (*)(void));
+    uint64_t base = (uint64_t)(uintptr_t)&host_posix_run & ~0xFFFFFull;
+    return v >= base && v < base + 0x1C00000;
+}
+
 static void sample_guest_threads(void)
 {
     int n = s_guest_thread_count, t, k;
     if (n > PS5_MAX_GUEST_THREADS)
         n = PS5_MAX_GUEST_THREADS;
     for (t = 0; t < n; t++) {
-        char line[512];
-        int len = snprintf(line, sizeof line, "[PS5]   thread %d pcs:", t);
-        for (k = 0; k < 6 && len < (int)sizeof line - 40; k++) {
+        for (k = 0; k < 3; k++) {
+            char line[512];
+            int len, i, found = 0;
             uintptr_t pc = sample_thread(s_guest_threads[t]);
-            len += snprintf(line + len, sizeof line - len, " %lx<%lx", (unsigned long)pc,
-                            (unsigned long)s_sample_ret);
-            usleep(3000);
+            len = snprintf(line, sizeof line, "[PS5]   thread %d at %lx, called from", t,
+                           (unsigned long)pc);
+            for (i = 0; i < SAMPLE_STACK_WORDS && found < 8; i++) {
+                uint64_t v = s_sample_stack[i];
+                if (in_image(v)) {
+                    len += snprintf(line + len, sizeof line - len, " %lx", (unsigned long)v);
+                    found++;
+                }
+            }
+            fprintf(stderr, "%s\n", line);
+            usleep(5000);
         }
-        fprintf(stderr, "%s\n", line);
     }
     {
         uintptr_t a[8], p[8];
@@ -666,6 +759,8 @@ int host_posix_run(int (*game_main)(void))
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
     pads_init();
+
+    ps5_time_basics();
 
     /* One [PACING] line every two seconds while frames are being shown. */
     setenv("RECOMP_PRESENT_PACING", "1", 0);

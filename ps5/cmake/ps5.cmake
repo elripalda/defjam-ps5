@@ -49,3 +49,8 @@ target_include_directories(defjam_shaderc PUBLIC "${DEFJAM_PS5_DIR}/shaderc/incl
 target_link_libraries(defjam_shaderc PRIVATE glslang::glslang glslang::SPIRV glslang::glslang-default-resource-limits)
 set_target_properties(defjam_shaderc PROPERTIES CXX_STANDARD 17)
 target_compile_definitions(defjam_shaderc PRIVATE ENABLE_HLSL=1)
+
+# Every C file: a flush of stdout or stderr does nothing (the port's flush
+# thread writes them once a second), so no game thread waits on the file
+# system for a log line. See ps5/include/ps5_quiet_fflush.h.
+add_compile_options("$<$<COMPILE_LANGUAGE:C>:-include${DEFJAM_PS5_DIR}/include/ps5_quiet_fflush.h>")

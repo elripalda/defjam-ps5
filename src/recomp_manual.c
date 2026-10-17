@@ -133,7 +133,10 @@ void recomp_unimpl(const char *text, uint32_t va)
     if (n <= (known ? 10 : 50) || stop) {
         fprintf(stderr, "%s untranslated instruction REACHED: `%s` at 0x%08X\n",
                 known ? "[UNIMPL-KNOWN]" : "[UNIMPL]", text, va);
-        fflush(stderr);
+        if (stop)
+            (fflush)(stderr);   /* the real one, before abort */
+        else
+            fflush(stderr);
     }
     if (stop) abort();
 }

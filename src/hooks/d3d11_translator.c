@@ -719,6 +719,17 @@ void d3d11_translator_report(void)
     pgraph_d3d11_get_stats(&st);
     if (memcmp(&st, &prev, sizeof(st)) == 0)
         return;
+#if defined(__PROSPERO__)
+    {
+        /* [ps5 port] Every frame changes these, and the line was 44% of the
+         * console's log: once every ten seconds there. */
+        static ULONGLONG last_ms;
+        ULONGLONG now = GetTickCount64();
+        if (last_ms && now - last_ms < 10000)
+            return;
+        last_ms = now;
+    }
+#endif
     prev = st;
     fprintf(stderr, "[TRANS] frames %u  draws %u  vertices %u  "
                     "methods handled %u ignored %u  clears %u\n",

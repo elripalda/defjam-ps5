@@ -79,15 +79,18 @@ typedef struct {
     int32_t user, handle;
     SDL_JoystickID id;
     SDL_Joystick *joy;
+    int dead;               /* the last read failed and the pad was released */
 } Ps5Pad;
 
 static Ps5Pad s_pads[MAX_PADS];
 static Uint64 s_last_scan;
 
+/* 0..255 with 128 at rest onto the full axis, the same reach both ways
+ * (255 used to stop at 32512, 99% of a push right or down). */
 static Sint16 axis(uint8_t v)
 {
-    int a = ((int)v - 128) * 256;
-    return (Sint16)(a > 32767 ? 32767 : a);
+    int a = (int)v - 128;
+    return (Sint16)(a < 0 ? a * 256 : a * 32767 / 127);
 }
 
 /* A virtual joystick's trigger axes use the whole range, released at the
@@ -111,8 +114,25 @@ static void SDLCALL pad_update(void *userdata)
     if (!p->joy || p->handle < 0)
         return;
     memset(&d, 0, sizeof d);
-    if (scePadReadState(p->handle, &d) != 0)
+    if (scePadReadState(p->handle, &d) != 0) {
+        /* A read that fails (the pad switched off, its user signed out) must
+         * not leave the last buttons held and the sticks pushed: the game
+         * would keep seeing them. Released once, until reads work again. */
+        int i;
+        if (p->dead)
+            return;
+        p->dead = 1;
+        for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++)
+            SDL_SetJoystickVirtualButton(p->joy, i, false);
+        SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_LEFTX, 0);
+        SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_LEFTY, 0);
+        SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHTX, 0);
+        SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHTY, 0);
+        SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, trigger(0));
+        SDL_SetJoystickVirtualAxis(p->joy, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, trigger(0));
         return;
+    }
+    p->dead = 0;
     b = d.buttons;
     SDL_SetJoystickVirtualButton(p->joy, SDL_GAMEPAD_BUTTON_SOUTH, (b & PAD_CROSS) != 0);
     SDL_SetJoystickVirtualButton(p->joy, SDL_GAMEPAD_BUTTON_EAST, (b & PAD_CIRCLE) != 0);
@@ -153,10 +173,23 @@ static void scan_pads(void)
     SceUserServiceLoginUserIdList users;
     int i, u;
 
+    int32_t fg = -1;
+
     for (i = 0; i < 4; i++)
         users.user_id[i] = -1;
     if (sceUserServiceGetLoginUserIdList(&users) < 0)
-        sceUserServiceGetForegroundUser(&users.user_id[0]);
+        users.user_id[0] = -1;
+    /* The user who started the game is player 1, whatever order the other
+     * signed-in users come in. */
+    if (sceUserServiceGetForegroundUser(&fg) == 0 && fg != -1 && fg != SYSTEM_USER) {
+        int32_t sorted[4] = { fg, -1, -1, -1 };
+        int n = 1;
+        for (i = 0; i < 4 && n < 4; i++)
+            if (users.user_id[i] != fg)
+                sorted[n++] = users.user_id[i];
+        for (i = 0; i < 4; i++)
+            users.user_id[i] = sorted[i];
+    }
     for (u = 0; u < 4; u++) {
         int32_t user = users.user_id[u], handle;
         Ps5Pad *slot = NULL;
@@ -312,7 +345,7 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     s_width = extent.width;
     s_height = extent.height;
     fprintf(stderr, "[PS5] TV output %ux%u at %u Hz\n", s_width, s_height, s_refresh);
-    fflush(stderr);
+    (fflush)(stderr);
     sceSystemServiceHideSplashScreen();
     return 1;
 }
@@ -381,7 +414,7 @@ __attribute__((constructor(101))) static void ps5_loaded(void)
 static void ps5_fatal(const char *message)
 {
     fprintf(stderr, "[FATAL] %s\n", message);
-    fflush(stderr);
+    (fflush)(stderr);
     ps5_notify(message);
     sleep(3);
     sceSystemServiceLoadExec("exit", NULL);
@@ -444,6 +477,18 @@ void ps5_logf(const char *fmt, ...)
         n = (int)sizeof buf - 1;
     if (s_crash_fd >= 0 && n > 0)
         write(s_crash_fd, buf, (size_t)n);
+}
+
+/* The runtime's crash handler, before it reports through stdio. snprintf into
+ * a stack buffer and one write: no lock that the crashed thread may hold. */
+void ps5_crash_note(const char *what, unsigned long long pc, unsigned long long addr)
+{
+    char msg[200];
+    int n = snprintf(msg, sizeof msg, "[PS5] crash: %s at pc 0x%llx (image at 0x%llx), address 0x%llx;"
+                     " the report is in defjam.log.err\n", what, pc,
+                     (unsigned long long)((uintptr_t)&host_posix_run & ~0xFFFFFull), addr);
+    if (s_crash_fd >= 0 && n > 0)
+        write(s_crash_fd, msg, (size_t)n);
 }
 
 static void early_fault(int sig, siginfo_t *si, void *uctx)
@@ -553,7 +598,11 @@ static void open_up_tree(const char *dir, int depth)
     struct dirent *e;
     char path[768];
 
-    chmod(dir, 0777);
+    {
+        struct stat st;
+        if (stat(dir, &st) == 0 && (st.st_mode & 0777) != 0777)
+            chmod(dir, 0777);
+    }
     if (depth > 6 || !(d = opendir(dir)))
         return;
     while ((e = readdir(d)) != NULL) {
@@ -565,7 +614,7 @@ static void open_up_tree(const char *dir, int depth)
             continue;
         if (S_ISDIR(st.st_mode))
             open_up_tree(path, depth + 1);
-        else
+        else if ((st.st_mode & 0666) != 0666)   /* only what still needs it */
             chmod(path, 0666);
     }
     closedir(d);
@@ -607,7 +656,7 @@ static void ps5_time_basics(void)
     clock_gettime(CLOCK_MONOTONIC, &a);
     for (i = 0; i < 5; i++) {
         fprintf(stderr, "[PS5] timing flush %d\n", i);
-        fflush(stderr);
+        (fflush)(stderr);
     }
     clock_gettime(CLOCK_MONOTONIC, &b);
     flush = bench_us(a, b, 5);
@@ -620,15 +669,22 @@ static void ps5_time_basics(void)
 
     {
         extern uint64_t sceKernelReadTsc(void);
-        extern uint64_t sceKernelGetTscFrequency(void);
         volatile uint64_t sink = 0;
         clock_gettime(CLOCK_MONOTONIC, &a);
         for (i = 0; i < 1000; i++)
             sink += sceKernelReadTsc();
         clock_gettime(CLOCK_MONOTONIC, &b);
         tsc = bench_us(a, b, 1000);
-        tsc_hz = sceKernelGetTscFrequency();
         (void)sink;
+    }
+    {
+        extern void ps5_tsc_info(uint64_t *reported, uint64_t *measured, uint64_t *used);
+        uint64_t reported, measured, used;
+        ps5_tsc_info(&reported, &measured, &used);
+        tsc_hz = used;
+        fprintf(stderr, "[PS5] time stamp counter: libkernel says %llu Hz, measured %llu Hz;"
+                        " clocks use %s\n", (unsigned long long)reported,
+                (unsigned long long)measured, used > 1 ? "the TSC" : "clock_gettime");
     }
 
     clock_gettime(CLOCK_MONOTONIC, &a);
@@ -713,13 +769,41 @@ extern volatile unsigned g_vk_frames_presented;
 
 /* Pushes the buffered logs out once a second. On its own thread, so a stream
  * stuck behind a lock cannot also silence the heartbeat. */
+/* The port's own helper threads (heartbeat, log flush, profiler, game watch)
+ * start before any guest thread pins itself, so they inherit every CPU,
+ * including the one the title runs on. Once the guest CPU is chosen, each of
+ * them moves off it the next time it calls this. */
+void ps5_off_guest_cpu(void)
+{
+    extern volatile uint64_t g_ps5_host_cpu_mask;
+    extern void *scePthreadSelf(void);
+    extern int scePthreadSetaffinity(void *thread, uint64_t mask);
+    static __thread int moved;
+    uint64_t mask = g_ps5_host_cpu_mask;
+    if (!moved && mask) {
+        moved = 1;
+        scePthreadSetaffinity(scePthreadSelf(), mask);
+    }
+}
+
 static void *flush_thread(void *unused)
 {
     (void)unused;
     for (;;) {
+        struct timespec a, b;
+        long ms;
+        static unsigned slow;
         sleep(1);
-        fflush(stdout);
-        fflush(stderr);
+        ps5_off_guest_cpu();
+        clock_gettime(CLOCK_MONOTONIC, &a);
+        (fflush)(stdout);
+        (fflush)(stderr);
+        clock_gettime(CLOCK_MONOTONIC, &b);
+        /* Every log line waits while this holds the stream: say when it is
+         * slow, so a hitch can be matched to it. */
+        ms = (long)((b.tv_sec - a.tv_sec) * 1000 + (b.tv_nsec - a.tv_nsec) / 1000000);
+        if (ms >= 20 && slow++ < 200)
+            ps5_logf("[PS5] log flush took %ld ms\n", ms);
     }
     return NULL;
 }
@@ -727,28 +811,79 @@ static void *flush_thread(void *unused)
 static void *heartbeat_thread(void *unused)
 {
     unsigned secs = 0;
+    int profiling;
     pthread_t fl;
     (void)unused;
-    ps5_prof_start();
+    /* The sampling profiler signals every thread about a thousand times a
+     * second, the audio output thread among them, whose blocking output call
+     * a signal can cut short: only when asked for (RECOMP_PS5_PROFILE=1). */
+    {
+        const char *e = getenv("RECOMP_PS5_PROFILE");
+        profiling = e && *e == '1';
+    }
+    if (profiling)
+        ps5_prof_start();
     ps5_gamewatch_start();
     if (pthread_create(&fl, NULL, flush_thread, NULL) == 0)
         pthread_detach(fl);
     for (;;) {
         unsigned step = secs < 300 ? 10 : 60;
         sleep(step);
+        ps5_off_guest_cpu();
         secs += step;
-        if (secs == 10 || secs % 60 == 0)
+        if (secs == 10 || (secs <= 300 ? secs % 60 == 0 : secs % 300 == 0))
             open_up_app_files();
         if (secs == 10)
             ps5_logf("[PS5] logs through %d pipe(s)\n", s_log_pipes);
         ps5_logf("[PS5] %u s: kernel calls %lld, guest calls %llu, frames %u, %d guest thread(s)\n",
                  secs, xbox_kernel_call_count(), (unsigned long long)g_icall_count,
                  g_vk_frames_presented, (int)s_guest_thread_count);
-        ps5_prof_report(secs);
+        if (profiling)
+            ps5_prof_report(secs);
         if (secs % 60 == 0)
             report_traps();
     }
     return NULL;
+}
+
+/* One CPU for the title's threads, the rest for everything else, decided
+ * before any thread starts. The guest CPU used to be chosen when the first
+ * title thread pinned itself, after the GPU executor, the audio threads, the
+ * tick thread and the USB thread had started with every CPU in their mask:
+ * they could land on the title's CPU and the title waited behind them. This
+ * thread moves to the host CPUs, so what it starts inherits them; threads made
+ * through CreateThread are placed by the runtime, title threads pin
+ * themselves. */
+static void split_cpus(void)
+{
+    extern volatile uint64_t g_ps5_host_cpu_mask;
+    extern volatile int g_ps5_guest_cpu;
+    extern void *scePthreadSelf(void);
+    extern int scePthreadGetaffinity(void *thread, uint64_t *mask);
+    extern int scePthreadSetaffinity(void *thread, uint64_t mask);
+    const char *s = getenv("RECOMP_GUEST_CORES");
+    uint64_t mask = 0;
+    int cpu = -1, i, e;
+
+    if (s && !strcmp(s, "all"))
+        return;
+    e = scePthreadGetaffinity(scePthreadSelf(), &mask);
+    if (e != 0 || !mask)
+        return;
+    if (mask & (1ull << 2))
+        cpu = 2;
+    else
+        for (i = 0; i < 64 && cpu < 0; i++)
+            if (mask & (1ull << i))
+                cpu = i;
+    if (cpu < 0 || !(mask & ~(1ull << cpu)))
+        return;
+    g_ps5_host_cpu_mask = mask & ~(1ull << cpu);
+    g_ps5_guest_cpu = cpu;
+    e = scePthreadSetaffinity(scePthreadSelf(), g_ps5_host_cpu_mask);
+    fprintf(stderr, "[PS5] CPUs 0x%llX: the title gets CPU %d, the rest 0x%llX (%s)\n",
+            (unsigned long long)mask, cpu, (unsigned long long)g_ps5_host_cpu_mask,
+            e ? "could not move the main thread" : "ok");
 }
 
 static void *game_thread(void *unused)
@@ -758,6 +893,36 @@ static void *game_thread(void *unused)
     fprintf(stderr, "[PS5] game thread started\n");
     s_game_result = s_game_main();
     return NULL;
+}
+
+/* Every way the game ends on purpose (the title asking to leave, the
+ * runtime's ExitProcess) comes here: logs written, files opened up, back to
+ * the home screen. */
+void ps5_exit_app(int code) __attribute__((noreturn));
+void ps5_exit_app(int code)
+{
+    fprintf(stderr, "[PS5] the game is leaving (code %d)\n", code);
+    (fflush)(stdout);
+    (fflush)(stderr);
+    open_up_app_files();
+    sceSystemServiceLoadExec("exit", NULL);
+    _exit(code);
+}
+
+/* The last two runs' logs are kept as *.prev and *.prev2, so a crash
+ * followed by a relaunch or two still has its log. */
+static void keep_previous_logs(const char *root)
+{
+    static const char *const names[] = { "defjam.log", "defjam.log.err", "ps5.log" };
+    char cur[512], prev[520], prev2[524];
+    size_t i;
+    for (i = 0; i < sizeof names / sizeof names[0]; i++) {
+        snprintf(cur, sizeof cur, "%s/logs/%s", root, names[i]);
+        snprintf(prev, sizeof prev, "%s.prev", cur);
+        snprintf(prev2, sizeof prev2, "%s.prev2", cur);
+        (void)rename(prev, prev2);
+        (void)rename(cur, prev);
+    }
 }
 
 int host_posix_run(int (*game_main)(void))
@@ -781,6 +946,7 @@ int host_posix_run(int (*game_main)(void))
         setenv("DEFJAM_DATA", root, 1);
     snprintf(log, sizeof log, "%s/logs", root);
     mkdir(log, 0777);
+    keep_previous_logs(root);
     snprintf(log, sizeof log, "%s/logs/defjam.log", root);
     if (log_to_file(log, stdout) != 0)
         ps5_notify("Def Jam can't write its log (logs folder in the app folder)");
@@ -789,7 +955,7 @@ int host_posix_run(int (*game_main)(void))
     setvbuf(stdout, NULL, _IOFBF, 1 << 16);
     setvbuf(stderr, NULL, _IOFBF, 1 << 16);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
-    fflush(stderr);
+    (fflush)(stderr);
     /* The heartbeat and early crash reports go to their own file, written
      * straight to it: they still arrive if a thread is stuck holding the
      * stderr stream. */
@@ -812,6 +978,8 @@ int host_posix_run(int (*game_main)(void))
         ps5_fatal(msg);
     }
 
+    split_cpus();
+
     /* No signal handlers from SDL: the runtime's own fault handler traps the
      * console's device registers and must see every SIGSEGV/SIGBUS first. */
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
@@ -822,6 +990,9 @@ int host_posix_run(int (*game_main)(void))
 
     /* One [PACING] line every two seconds while frames are being shown. */
     setenv("RECOMP_PRESENT_PACING", "1", 0);
+    /* No keyboard here: without this the hub always carried an idle second
+     * controller for one, and a second player's pad came in as player 3. */
+    setenv("RECOMP_KEYBOARD_PLAYER", "off", 0);
     /* The title's 60 Hz frame clock is the GPU timer's alarm: a [PTIMER] line
      * every five seconds with how many alarms fired, and one if an alarm
      * fires and is never re-armed (the clock, and with it the game's input
@@ -842,8 +1013,8 @@ int host_posix_run(int (*game_main)(void))
     }
     pthread_attr_destroy(&attr);
     pthread_join(th, NULL);
-    fflush(stdout);
-    fflush(stderr);
+    (fflush)(stdout);
+    (fflush)(stderr);
     open_up_app_files();
     sleep(1);               /* the log pumps write out what is left */
     sceSystemServiceLoadExec("exit", NULL);

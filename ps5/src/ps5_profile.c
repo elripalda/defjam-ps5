@@ -129,11 +129,14 @@ static void prof_handler(int sig, siginfo_t *si, void *uctx)
     __atomic_add_fetch(&s_seq, 1, __ATOMIC_RELEASE);
 }
 
+void ps5_off_guest_cpu(void);
+
 static void *sampler_thread(void *unused)
 {
     (void)unused;
     for (;;) {
         int n = __atomic_load_n(&s_count, __ATOMIC_ACQUIRE), i;
+        ps5_off_guest_cpu();
         for (i = 0; i < n; i++) {
             int seq, w;
             if (!s_threads[i].live)

@@ -166,8 +166,17 @@ static void build_config(InputHostConfig *cfg)
     cfg->virtual_chord_ms = getenv("RECOMP_INPUT_VIRTUAL_CHORD_MS") ? atoi(getenv("RECOMP_INPUT_VIRTUAL_CHORD_MS")) : 0;
     cfg->ignore_focus = env_on("RECOMP_INPUT_IGNORE_FOCUS");
 
-    cfg->padmap.deadzone_left = (uint8_t)geti("gamepad", "left_deadzone", 15);
-    cfg->padmap.deadzone_right = (uint8_t)geti("gamepad", "right_deadzone", 15);
+    cfg->padmap.deadzone_left = (uint8_t)geti("gamepad", "left_deadzone", cfg->padmap.deadzone_left);
+    cfg->padmap.deadzone_right = (uint8_t)geti("gamepad", "right_deadzone", cfg->padmap.deadzone_right);
+#if defined(__PROSPERO__)
+    /* [ps5 port] 15 was the default before the console's became 0 (the title
+     * has its own dead zone; input_map.c). A settings.ini written by an
+     * earlier build still says 15: read that as "the default". */
+    if (cfg->padmap.deadzone_left == 15)
+        cfg->padmap.deadzone_left = 0;
+    if (cfg->padmap.deadzone_right == 15)
+        cfg->padmap.deadzone_right = 0;
+#endif
     cfg->padmap.trigger_threshold = (uint8_t)geti("gamepad", "trigger_threshold", 5);
     cfg->padmap.button_threshold = (uint8_t)geti("gamepad", "button_threshold", 50);
     cfg->padmap.left_stick = (uint8_t)geti("gamepad", "left_stick", INPUT_STICK_LEFT);

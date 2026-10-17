@@ -110,7 +110,7 @@ cat > "$app/sce_sys/param.json" <<EOF
   "gameIntent": { "permittedIntents": [ { "intentType": "launchActivity" } ] },
   "localizedParameters": {
     "defaultLanguage": "en-US",
-    "en-US": { "titleName": "Def Jam: Fight for NY Remastered" }
+    "en-US": { "titleName": "DEF JAM: FIGHT FOR NY REMASTERED" }
   },
   "masterVersion": "01.00",
   "pubtools": { "creationDate": "2026-10-16 00:00:00", "loudnessSnd0": "-28.00", "toolVersion": "2.00" },
@@ -141,6 +141,15 @@ TXT
 else
     echo "warning: no Roboto font found; the in-game menu uses Dear ImGui's built-in one" >&2
 fi
+# The menu's own type: Oswald for text and Bebas Neue for headings (SIL Open Font License).
+if compgen -G "$port/ps5/fonts/*.ttf" >/dev/null; then
+    mkdir -p "$app/fonts"
+    cp "$port"/ps5/fonts/*.ttf "$port"/ps5/fonts/OFL-*.txt "$app/fonts/"
+    cat >> "$app/fonts/README.txt" <<'TXT'
+Oswald-Regular.ttf: Oswald by Vernon Adams and the Oswald Project Authors, OFL 1.1 (OFL-Oswald.txt).
+BebasNeue-Regular.ttf: Bebas Neue by Dharma Type, OFL 1.1 (OFL-BebasNeue.txt).
+TXT
+fi
 # The border beside 4:3 menus (display.widescreen_side_fill = border); replaceable.
 # ps5/assets is not tracked; the default picture is made by ps5/tools/make_border.py.
 if [[ ! -f $port/ps5/assets/borders/border.png ]]; then
@@ -148,20 +157,23 @@ if [[ ! -f $port/ps5/assets/borders/border.png ]]; then
     python3 "$port/ps5/tools/make_border.py" "$port/ps5/assets/borders/border.png" \
         || echo "warning: could not make the default border (needs numpy and Pillow)" >&2
 fi
-if [[ -f $port/ps5/assets/borders/border.png ]]; then
+if compgen -G "$port/ps5/assets/borders/*.png" >/dev/null; then
     mkdir -p "$app/borders"
-    cp "$port/ps5/assets/borders/border.png" "$app/borders/"
+    cp "$port"/ps5/assets/borders/*.png "$app/borders/"
+    chmod 644 "$app"/borders/*.png
     cat > "$app/borders/README.txt" <<'TXT'
-border.png fills the black bars beside the game's 4:3 picture in menus, movies
-and loading screens. It goes away on its own once a fight or cutscene starts.
+These fill the bars beside the game's 4:3 picture in menus, movies and
+loading screens. They go away on their own once a fight or cutscene starts.
 
-To use your own: save a 3840x2160 PNG (or JPEG) here as border.png, replacing
-this one. The game covers the middle 2880 pixels, so only the left 480 and
-right 480 pixels show. Leave the middle empty or fill it, it doesn't matter.
-Other sizes work too; the picture is stretched to the screen.
+  border-logo.png   the Remastered logo on both sides (the default)
+  border-red.png    dark sides with a red edge
+  border-gold.png   dark sides with a gold edge
+  border.png        the plain one
 
-Turn it off in the in-game menu (L3+R3): Display, "Beside 4:3 pictures",
-set to black.
+Pick one in the in-game menu (L3+R3): Video, "Beside 4:3 screens".
+
+To use your own, save a 3840x2160 PNG over one of these. The game covers the
+middle 2880 pixels, so only the left 480 and right 480 show.
 TXT
 fi
 # PlayStation buttons (drawn by ps5/tools/make_ps_buttons.py), the owner's own art (mods/custom) and

@@ -138,7 +138,7 @@ static const char *friendly(const char *section, const char *key)
         { "debug", "unlock_all", "Debug - Unlock all Fighters and Venues (Requires Restart)" },
         { "ui", "overlay_pad", "Overlay pad buttons" }, { "ui", "overlay_key", "Overlay key" },
         { "display", "output_4k", "4K output" }, { "ui", "show_fps", "Frame counter" },
-        { "ui", "button_style", "Button style" }, { "display", "sharp_text", "Sharper text" },
+        { "display", "border", "Border" }, { "display", "sharp_text", "Sharper text" },
     };
     for (const Label &l : labels)
         if (!strcmp(l.section, section) && !strcmp(l.key, key)) return l.text;
@@ -349,6 +349,11 @@ void ui_feed_gamepad()
 // on a large monitor) gets bigger text, so the screen is as easy to read as it is in a window.
 static float g_extra_scale = 1.0f;
 
+// [ps5 port] The menu's heading face (Bebas Neue), and where the body face's capitals sit (their middle, as a
+// fraction of the size: text is centred on it).
+static ImFont *g_font_display;
+static float g_font_body_mid = 0.5f;
+
 static float display_scale(UiWindow window)
 {
     float dpi = g_extra_scale;
@@ -377,6 +382,28 @@ void ui_apply_scale(UiWindow window)
     applied = s;
     style = ImGuiStyle();
     ImGui::StyleColorsDark();
+#if defined(__PROSPERO__)
+    // [ps5 port] Near-black panel, white type, the logo's red (pc_ui_ps5.inc draws the rest).
+    style.WindowRounding = 10.0f;
+    style.WindowBorderSize = 1.0f;
+    style.WindowPadding = ImVec2(30, 22);
+    style.ItemSpacing = ImVec2(10, 3);
+    style.ScrollbarSize = 5.0f;
+    style.ScrollbarRounding = 3.0f;
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.035f, 0.035f, 0.04f, 0.95f);
+    style.Colors[ImGuiCol_ChildBg] = ImVec4(0, 0, 0, 0);
+    style.Colors[ImGuiCol_Border] = ImVec4(1, 1, 1, 0.08f);
+    style.Colors[ImGuiCol_Text] = ImVec4(0.94f, 0.94f, 0.94f, 1.0f);
+    style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.54f, 0.54f, 0.57f, 1.0f);
+    style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0, 0, 0, 0);
+    style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(1, 1, 1, 0.14f);
+    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(1, 1, 1, 0.22f);
+    style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(1, 1, 1, 0.3f);
+    style.Colors[ImGuiCol_NavCursor] = ImVec4(0.886f, 0.118f, 0.149f, 1.0f);
+    style.ScaleAllSizes(s);
+    style.FontScaleMain = s;
+    return;
+#endif
     style.WindowRounding = 6.0f;
     style.FrameRounding = 4.0f;
     style.TabRounding = 4.0f;
@@ -419,12 +446,21 @@ void ui_context_begin(UiWindow window)
     }
 #elif defined(__PROSPERO__)
     {
-        // [ps5 port] No system fonts to borrow: the app carries Roboto (fonts/ in its folder).
+        // [ps5 port] No system fonts to borrow: the app carries its own (fonts/ in its folder). Oswald for the
+        // text and Bebas Neue for headings, both condensed like the game's lettering; Roboto if they are missing.
         const char *root = getenv("DEFJAM_DATA");
-        std::string font = std::string(root ? root : "/app0") + "/fonts/Roboto-Medium.ttf";
+        std::string dir = std::string(root ? root : "/app0") + "/fonts/";
+        std::string body = dir + "Oswald-Regular.ttf", plain = dir + "Roboto-Medium.ttf", head = dir + "BebasNeue-Regular.ttf";
         struct stat st;
-        if (stat(font.c_str(), &st) == 0)
-            io.Fonts->AddFontFromFileTTF(font.c_str(), 17.0f);
+        if (stat(body.c_str(), &st) == 0 && io.Fonts->AddFontFromFileTTF(body.c_str(), 24.0f))
+            g_font_body_mid = 0.53f;
+        else if (stat(plain.c_str(), &st) == 0 && io.Fonts->AddFontFromFileTTF(plain.c_str(), 21.0f))
+            g_font_body_mid = 0.49f;
+        else
+            io.Fonts->AddFontDefault();
+        g_font_display = nullptr;
+        if (stat(head.c_str(), &st) == 0)
+            g_font_display = io.Fonts->AddFontFromFileTTF(head.c_str(), 24.0f);
     }
 #else
     static const char *const fonts[] = {
@@ -446,6 +482,7 @@ void ui_context_end()
     g_start_values.clear();         // what was changed in the launcher has been applied: the overlay starts afresh
 }
 
+#if !defined(__PROSPERO__)
 // ---- generic setting widgets --------------------------------------------------------------------------
 
 // A bool, integer, choice or text setting as its natural control. Returns true when it changed.
@@ -517,30 +554,6 @@ static void settings_group(const char *section, std::initializer_list<const char
 
 // ---- the pages ----------------------------------------------------------------------------------------------
 
-#if defined(__PROSPERO__)
-// [ps5 port] A TV, not a window: the picture's shape, its sharpness and the output.
-static void page_display()
-{
-    ImGui::SeparatorText("Picture");
-    settings_group("display", { "aspect" });
-    if (recomp_settings_get("display", "aspect", 0) >= 2) {
-        ImGui::Indent();
-        settings_group("display", { "widescreen_hud", "widescreen_cutscenes", "widescreen_side_fill" });
-        ImGui::TextWrapped("Widescreen: the 3D view gets wider; menus, the HUD and movies keep their shape. "
-                           "Border puts borders/border.png (in the game's folder) beside them; swap in your own "
-                           "3840x2160 picture to change it.");
-        ImGui::Unindent();
-    }
-    settings_group("display", { "filter" });
-    ImGui::SeparatorText("Quality");
-    settings_group("display", { "render_scale", "output_4k", "gamma", "sharp_text" });
-    ImGui::TextWrapped("Render scale 4 draws the game at 3413x1920 in 16:9, close to 4K; lower it if the frame counter "
-                       "drops below 60. The picture shape, render scale, 4K output and brightness curve apply the next "
-                       "time the game starts; the filter applies at once.");
-    ImGui::SeparatorText("While playing");
-    settings_group("ui", { "show_fps" });
-}
-#else
 static void page_display()
 {
     ImGui::SeparatorText("Window and picture");
@@ -564,7 +577,6 @@ static void page_display()
     ImGui::SeparatorText("While playing");
     settings_group("ui", { "show_fps" });
 }
-#endif
 
 static void page_textures()
 {
@@ -794,52 +806,6 @@ static void open_folder()
 }
 #endif
 
-#if defined(__PROSPERO__)
-// [ps5 port] No launcher, no keyboard, no file manager.
-static void page_general(UiMode)
-{
-    ImGui::SeparatorText("This menu");
-    {
-        RecompSetting *p = find("ui", "overlay_pad");
-        if (p) setting_widget(p);
-        ImGui::TextWrapped("Hold L3 and R3 (both stick clicks) for half a second to open or close this menu; Circle "
-                           "also closes it. While it is open the game sees no input and keeps running.");
-    }
-    settings_group("ui", { "scale" });
-    ImGui::SeparatorText("Buttons and text");
-    settings_group("ui", { "button_style" });
-    ImGui::TextWrapped("Applies the next time the game starts. Your own pictures go in mods/custom and the text "
-                       "changes are in text/replace.txt, both in the game's folder.");
-    ImGui::SeparatorText("Debug");
-    settings_group("debug", { "unlock_all" });
-    ImGui::TextWrapped("For testing: every fighter and venue is available on any profile. It changes the profile in memory "
-                       "and asks the game to save it, so keep it off for a save you care about.");
-    ImGui::SeparatorText("Files");
-    ImGui::TextWrapped("Settings are saved as you change them in: %s", pc_settings_path());
-    static bool confirm_reset;
-    if (ImGui::Button("Reset every setting to default")) confirm_reset = true;
-    if (confirm_reset) ImGui::OpenPopup("Reset every setting?");
-    if (ImGui::BeginPopupModal("Reset every setting?", &confirm_reset, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Display, controller and menu settings all go back to their defaults.");
-        if (ImGui::Button("Reset")) {
-            for (size_t i = 0; i < recomp_settings_count(); i++) {
-                RecompSetting *s = recomp_settings_at(i);
-                if (strcmp(s->section, "ps5"))
-                    recomp_settings_reset_to_default(s->section, s->key);
-            }
-            commit();
-            confirm_reset = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) { confirm_reset = false; ImGui::CloseCurrentPopup(); }
-        ImGui::EndPopup();
-    }
-    ImGui::SeparatorText("About");
-    ImGui::Text("Def Jam: Fight for NY Remastered, PS5 version %s", DEFJAM_VERSION);
-    ImGui::TextDisabled("Dear ImGui %s (MIT)  -  SDL3 (zlib)  -  Roboto (Apache 2.0)", IMGUI_VERSION);
-}
-#else
 static void page_general(UiMode mode)
 {
     ImGui::SeparatorText("Start-up");
@@ -900,7 +866,6 @@ static void page_general(UiMode mode)
     ImGui::Text("Def Jam: Fight for NY - Recompiled, version %s", DEFJAM_VERSION);
     ImGui::TextDisabled("Dear ImGui %s (MIT)  -  SDL3 (zlib)", IMGUI_VERSION);
 }
-#endif
 
 UiResult ui_draw(UiMode mode, float x, float y, float width, float height)
 {
@@ -970,6 +935,10 @@ UiResult ui_draw(UiMode mode, float x, float y, float width, float height)
     ImGui::End();
     return result;
 }
+#else
+#include <math.h>
+#include "pc_ui_ps5.inc"
+#endif
 
 // ---- the overlay ----------------------------------------------------------------------------------------------------
 
@@ -1334,7 +1303,13 @@ std::string border_path()
 {
     const char *root = getenv("DEFJAM_DATA");
 #if defined(__PROSPERO__)
-    return std::string(root ? root : "/app0") + "/borders/border.png";
+    // [display] border picks the picture: the logo, red or gold edge, or the plain one.
+    static const char *const files[] = { "border-logo.png", "border-red.png", "border-gold.png", "border.png" };
+    int pick = recomp_settings_get("display", "border", 0);
+    if (pick < 0 || pick > 3) pick = 0;
+    std::string dir = std::string(root ? root : "/app0") + "/borders/", path = dir + files[pick];
+    struct stat st;
+    return stat(path.c_str(), &st) == 0 ? path : dir + "border.png";
 #else
     return std::string(root ? root : ".") + "/borders/border.png";
 #endif
@@ -1679,10 +1654,16 @@ void overlay_draw(const D3D8VkOverlayFrame *f, void *)
         ImGui::SetNextWindowFocus();
     }
     ImDrawList *bg = ImGui::GetBackgroundDrawList();
+#if defined(__PROSPERO__)
+    // [ps5 port] A narrower panel over a darker game: a pause screen, not a dialog.
+    bg->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 175));
+    float pw = io.DisplaySize.x * 0.58f, ph = io.DisplaySize.y * 0.84f;
+#else
     bg->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 150));
     float pw = io.DisplaySize.x * 0.82f, ph = io.DisplaySize.y * 0.86f;
     if (pw < 560) pw = io.DisplaySize.x;
     if (ph < 420) ph = io.DisplaySize.y;
+#endif
     bool close_request = false;
     {
         ImGui::SetNextWindowBgAlpha(0.96f);

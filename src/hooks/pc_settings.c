@@ -43,7 +43,7 @@ static const char *const k_ws_hud[] = { "auto", "edges", "centered", NULL };
 static const char *const k_ws_cutscenes[] = { "authored", "fill", NULL };
 static const char *const k_ws_fill[] = { "blur", "black", "border", NULL };
 #if defined(__PROSPERO__)
-static const char *const k_button_style[] = { "playstation", "original", NULL };
+static const char *const k_border[] = { "logo", "red", "gold", "plain", NULL };
 #endif
 
 /* A four-fighter match holds about 2 GiB of replacements. At 512 MiB the cache evicted and
@@ -54,14 +54,16 @@ static const char *const k_button_style[] = { "playstation", "original", NULL };
  * times the console's resolution (3413x1920 in 16:9) for a 3840x2160 output. */
 #define DEFAULT_ASPECT 3        /* 16:9 */
 #define DEFAULT_RENDER_SCALE 4
-#define DEFAULT_SIDE_FILL 2     /* border: the Vulkan renderer draws no blur */
+#define DEFAULT_SIDE_FILL 2     /* border */
+#define DEFAULT_TEXTURES 1      /* the HD packs in mods/ */
 #else
 #define DEFAULT_ASPECT 0        /* 4:3 */
 #define DEFAULT_RENDER_SCALE 2
 #define DEFAULT_SIDE_FILL 0     /* blur */
+#define DEFAULT_TEXTURES 0
 #endif
 static RecompSetting g_display_settings[] = {
-    { "textures", "enabled", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
+    { "textures", "enabled", RECOMP_SETTING_BOOL, DEFAULT_TEXTURES, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
       "Use texture packs from the data folder's mods directory." },
     { "textures", "packs", RECOMP_SETTING_STRING, 0, 0, 0, NULL, "RECOMP_TEXTURE_PACKS", RECOMP_SETTING_RESTART,
       "Pack folder names separated by semicolons. Later packs take precedence.", "faithful-hd" },
@@ -107,9 +109,8 @@ static RecompSetting g_display_settings[] = {
       "Which set of console defaults this file has been brought up to. Leave it as it is." },
     { "display", "sharp_text", RECOMP_SETTING_BOOL, 1, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
       "Redraw the game's menu text at four times its size with clean edges, instead of stretching it." },
-    { "ui", "button_style", RECOMP_SETTING_ENUM, 0, 0, 0, k_button_style, NULL, RECOMP_SETTING_RESTART,
-      "PlayStation: the game's button pictures show Cross, Circle, Square, Triangle, L2 and R2, and its text says "
-      "PS5 and OPTIONS. Original: the Xbox buttons and text, as the game shipped." },
+    { "display", "border", RECOMP_SETTING_ENUM, 0, 0, 0, k_border, NULL, RECOMP_SETTING_RESTART,
+      "Which picture fills the sides with the border: borders/border-logo.png, -red, -gold or border.png." },
 #endif
 };
 #define DISPLAY_SETTING_COUNT (sizeof(g_display_settings) / sizeof(g_display_settings[0]))
@@ -570,11 +571,13 @@ int pc_settings_init(void)
         /* [ps5 port] A settings.ini written by an earlier build holds that
          * build's defaults (4:3, twice the console's resolution), which win
          * over new ones. Once per new set: bring it up to this build's. */
-        enum { PS5_DEFAULTS = 22 };
+        enum { PS5_DEFAULTS = 23 };
         int had = recomp_settings_get("ps5", "defaults", 0);
-        if (had < PS5_DEFAULTS) {
-            /* Set 22: the border beside 4:3 menus (blur is not drawn on the console). */
+        if (had < 22)       /* the border beside 4:3 menus */
             recomp_settings_set("display", "widescreen_side_fill", DEFAULT_SIDE_FILL);
+        if (had < 23) {     /* the HD packs on, and the logo border */
+            recomp_settings_set("textures", "enabled", 1);
+            recomp_settings_set("display", "border", 0);
         }
         if (had < 21) {
             recomp_settings_set("display", "aspect", DEFAULT_ASPECT);
@@ -607,10 +610,10 @@ int pc_settings_init(void)
         char value[MAX_PATH*2], packs[RECOMP_SETTING_TEXT_MAX];
 #if defined(__PROSPERO__)
         {
-            /* [ps5 port] The app's own packs, in mods/: PlayStation buttons (unless the original style is
-             * chosen) and the owner's art in custom/, listed last so it wins. Then the text (ps5_text.c). */
+            /* [ps5 port] The app's own packs, in mods/: the PlayStation buttons, always, the HD packs when
+             * they are on, and the owner's art in custom/, listed last so it wins. Then the text (ps5_text.c). */
             extern void ps5_text_prepare(int playstation);
-            int playstation = recomp_settings_get("ui", "button_style", 0) == 0;
+            int hd = recomp_settings_get("textures", "enabled", 1);
             if (!getenv("RECOMP_TEXTURE_PACKS")) {
                 /* Every folder in mods/ is a pack: playstation first, then the others (HD packs)
                  * in name order, then custom, so the owner's own pictures win. */
@@ -620,7 +623,7 @@ int pc_settings_init(void)
                 struct dirent *ent;
                 const char *data = getenv("DEFJAM_DATA");
                 snprintf(dir, sizeof dir, "%s/mods", data && *data ? data : ".");
-                if ((d = opendir(dir)) != NULL) {
+                if (hd && (d = opendir(dir)) != NULL) {
                     while ((ent = readdir(d)) != NULL && n < 32) {
                         if (ent->d_name[0] == '.' || !strcmp(ent->d_name, "playstation") ||
                             !strcmp(ent->d_name, "custom") || strlen(ent->d_name) >= sizeof names[0])
@@ -634,8 +637,7 @@ int pc_settings_init(void)
                         char t[64];
                         memcpy(t, names[j], sizeof t); memcpy(names[j], names[j - 1], sizeof t); memcpy(names[j - 1], t, sizeof t);
                     }
-                if (playstation)
-                    strcat(list, "playstation;");
+                strcat(list, "playstation;");
                 for (i = 0; i < n; i++) {
                     strncat(list, names[i], sizeof list - strlen(list) - 2);
                     strcat(list, ";");
@@ -648,7 +650,7 @@ int pc_settings_init(void)
                 _putenv_s("RECOMP_TEXTURE_CACHE_MB", "512");
             if (!getenv("RECOMP_TEXT_SHARPEN"))
                 _putenv_s("RECOMP_TEXT_SHARPEN", recomp_settings_get("display", "sharp_text", 1) ? "4" : "0");
-            ps5_text_prepare(playstation);
+            ps5_text_prepare(1);
         }
 #endif
         if (!getenv("RECOMP_TEXTURE_PACKS")) {

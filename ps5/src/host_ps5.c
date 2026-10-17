@@ -419,8 +419,8 @@ int host_posix_run(int (*game_main)(void));
  * stderr's stream. */
 static int s_crash_fd = -1;
 
-static void ps5_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static void ps5_logf(const char *fmt, ...)
+void ps5_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void ps5_logf(const char *fmt, ...)
 {
     char buf[768];
     va_list ap;
@@ -656,94 +656,28 @@ uint64_t mmio_trap_fault_count(void);
 void mmio_trap_last_faults(uintptr_t addr[8], uintptr_t pc[8]);
 uint64_t mmio_trap_neighbour_count(void);
 
-#define PS5_MAX_GUEST_THREADS 32
-static pthread_t s_guest_threads[PS5_MAX_GUEST_THREADS];
 static volatile int s_guest_thread_count;
-static volatile uintptr_t s_sample_pc, s_sample_ret;
-#define SAMPLE_STACK_WORDS 96
-static volatile uint64_t s_sample_stack[SAMPLE_STACK_WORDS];
-static volatile int s_sample_seq;
+
+void ps5_prof_register(const char *name);
+void ps5_prof_start(void);
+void ps5_prof_report(unsigned secs);
 
 void ps5_guest_thread_register(void)
 {
+    char name[32];
     int n = __atomic_fetch_add(&s_guest_thread_count, 1, __ATOMIC_SEQ_CST);
-    if (n < PS5_MAX_GUEST_THREADS)
-        s_guest_threads[n] = pthread_self();
+    snprintf(name, sizeof name, "guest %d", n);
+    ps5_prof_register(name);
 }
 
-static void sample_handler(int sig, siginfo_t *si, void *uctx)
+static void report_traps(void)
 {
-    (void)sig; (void)si;
-    /* rip: slot 20 of the mcontext, 64 bytes in (mmio_trap.c). */
-    s_sample_pc = ((uint64_t *)((uint8_t *)uctx + 64))[20];
-    /* rsp: slot 23. A system call stub is a leaf; its caller is on top. */
-    {
-        const uint64_t *sp = (const uint64_t *)((uint64_t *)((uint8_t *)uctx + 64))[23];
-        /* Only as far as the end of the 16 KB page rsp is in: the top of a
-         * thread's stack can be the end of its mapping. */
-        int i, n = (int)((0x4000 - ((uintptr_t)sp & 0x3FFF)) / 8);
-        if (n > SAMPLE_STACK_WORDS)
-            n = SAMPLE_STACK_WORDS;
-        s_sample_ret = sp[0];
-        for (i = 0; i < SAMPLE_STACK_WORDS; i++)
-            s_sample_stack[i] = i < n ? sp[i] : 0;
-    }
-    __atomic_add_fetch(&s_sample_seq, 1, __ATOMIC_SEQ_CST);
-}
-
-static uintptr_t sample_thread(pthread_t t)
-{
-    int seq = s_sample_seq, i;
-    s_sample_pc = 0;
-    if (pthread_kill(t, SIGUSR1) != 0)
-        return 0;
-    for (i = 0; i < 200 && s_sample_seq == seq; i++)
-        usleep(100);
-    return s_sample_seq == seq ? 1 : s_sample_pc;
-}
-
-/* Words on the sampled stack that point into this program's code: its
- * callers, the last one first (a scan, so an old one can show up too). */
-static int in_image(uint64_t v)
-{
-    extern int host_posix_run(int (*)(void));
-    uint64_t base = (uint64_t)(uintptr_t)&host_posix_run & ~0xFFFFFull;
-    return v >= base && v < base + 0x1C00000;
-}
-
-static void sample_guest_threads(void)
-{
-    int n = s_guest_thread_count, t, k;
-    if (n > PS5_MAX_GUEST_THREADS)
-        n = PS5_MAX_GUEST_THREADS;
-    for (t = 0; t < n; t++) {
-        for (k = 0; k < 3; k++) {
-            char line[512];
-            int len, i, found = 0;
-            uintptr_t pc = sample_thread(s_guest_threads[t]);
-            len = snprintf(line, sizeof line, "[PS5]   thread %d at %lx, called from", t,
-                           (unsigned long)pc);
-            for (i = 0; i < SAMPLE_STACK_WORDS && found < 8; i++) {
-                uint64_t v = s_sample_stack[i];
-                if (in_image(v)) {
-                    len += snprintf(line + len, sizeof line - len, " %lx", (unsigned long)v);
-                    found++;
-                }
-            }
-            ps5_logf("%s\n", line);
-            usleep(5000);
-        }
-    }
-    {
-        uintptr_t a[8], p[8];
-        mmio_trap_last_faults(a, p);
-        ps5_logf("[PS5]   traps %llu (neighbour pages %llu), last at"
-                " %lx/%lx %lx/%lx %lx/%lx %lx/%lx\n",
-                (unsigned long long)mmio_trap_fault_count(),
-                (unsigned long long)mmio_trap_neighbour_count(),
-                (unsigned long)a[0], (unsigned long)p[0], (unsigned long)a[1], (unsigned long)p[1],
-                (unsigned long)a[2], (unsigned long)p[2], (unsigned long)a[3], (unsigned long)p[3]);
-    }
+    uintptr_t a[8], p[8];
+    mmio_trap_last_faults(a, p);
+    ps5_logf("[PS5]   traps %llu (neighbour pages %llu)\n",
+             (unsigned long long)mmio_trap_fault_count(),
+             (unsigned long long)mmio_trap_neighbour_count());
+    (void)a; (void)p;
 }
 
 extern long long xbox_kernel_call_count(void);
@@ -764,18 +698,14 @@ static void *flush_thread(void *unused)
 
 static void *heartbeat_thread(void *unused)
 {
-    unsigned secs = 0, step = 10;
-    struct sigaction sa;
+    unsigned secs = 0;
     pthread_t fl;
     (void)unused;
-    memset(&sa, 0, sizeof sa);
-    sa.sa_sigaction = sample_handler;
-    sa.sa_flags = SA_SIGINFO | SA_RESTART;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGUSR1, &sa, NULL);
+    ps5_prof_start();
     if (pthread_create(&fl, NULL, flush_thread, NULL) == 0)
         pthread_detach(fl);
     for (;;) {
+        unsigned step = secs < 300 ? 10 : 60;
         sleep(step);
         secs += step;
         if (secs == 10 || secs % 60 == 0)
@@ -785,10 +715,9 @@ static void *heartbeat_thread(void *unused)
         ps5_logf("[PS5] %u s: kernel calls %lld, guest calls %llu, frames %u, %d guest thread(s)\n",
                  secs, xbox_kernel_call_count(), (unsigned long long)g_icall_count,
                  g_vk_frames_presented, (int)s_guest_thread_count);
-        if (secs == 30 || secs % 120 == 0)
-            sample_guest_threads();
-        if (secs >= 60)
-            step = 30;
+        ps5_prof_report(secs);
+        if (secs % 60 == 0)
+            report_traps();
     }
     return NULL;
 }
@@ -796,6 +725,7 @@ static void *heartbeat_thread(void *unused)
 static void *game_thread(void *unused)
 {
     (void)unused;
+    ps5_prof_register("game main");
     fprintf(stderr, "[PS5] game thread started\n");
     s_game_result = s_game_main();
     return NULL;

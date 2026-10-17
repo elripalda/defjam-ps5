@@ -105,6 +105,8 @@ static RecompSetting g_display_settings[] = {
       "Send 3840x2160 to the TV when it takes it; off, or a TV without it, gets 1920x1080." },
     { "ps5", "defaults", RECOMP_SETTING_INT, 0, 0, 1000, NULL, NULL, 0,
       "Which set of console defaults this file has been brought up to. Leave it as it is." },
+    { "display", "sharp_text", RECOMP_SETTING_BOOL, 1, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
+      "Redraw the game's menu text at four times its size with clean edges, instead of stretching it." },
     { "ui", "button_style", RECOMP_SETTING_ENUM, 0, 0, 0, k_button_style, NULL, RECOMP_SETTING_RESTART,
       "PlayStation: the game's button pictures show Cross, Circle, Square, Triangle, L2 and R2, and its text says "
       "PS5 and OPTIONS. Original: the Xbox buttons and text, as the game shipped." },
@@ -644,6 +646,8 @@ int pc_settings_init(void)
             }
             if (!getenv("RECOMP_TEXTURE_CACHE_MB"))
                 _putenv_s("RECOMP_TEXTURE_CACHE_MB", "512");
+            if (!getenv("RECOMP_TEXT_SHARPEN"))
+                _putenv_s("RECOMP_TEXT_SHARPEN", recomp_settings_get("display", "sharp_text", 1) ? "4" : "0");
             ps5_text_prepare(playstation);
         }
 #endif

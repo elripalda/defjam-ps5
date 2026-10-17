@@ -9,7 +9,7 @@
 
 [always]
 // The line under the copyright on the title screen.
-Developed by AKI Corporation. => Developed by AKI Corporation.#PS5 port by elripalda
+Developed by AKI Corporation. => Developed by AKI Corporation.#PlayStation®5 Port by @elripalda
 
 [playstation]
 the hard disk is being accessed => the game is saving or loading

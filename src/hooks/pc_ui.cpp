@@ -138,7 +138,7 @@ static const char *friendly(const char *section, const char *key)
         { "debug", "unlock_all", "Debug - Unlock all Fighters and Venues (Requires Restart)" },
         { "ui", "overlay_pad", "Overlay pad buttons" }, { "ui", "overlay_key", "Overlay key" },
         { "display", "output_4k", "4K output" }, { "ui", "show_fps", "Frame counter" },
-        { "ui", "button_style", "Button style" },
+        { "ui", "button_style", "Button style" }, { "display", "sharp_text", "Sharper text" },
     };
     for (const Label &l : labels)
         if (!strcmp(l.section, section) && !strcmp(l.key, key)) return l.text;
@@ -533,7 +533,7 @@ static void page_display()
     }
     settings_group("display", { "filter" });
     ImGui::SeparatorText("Quality");
-    settings_group("display", { "render_scale", "output_4k", "gamma" });
+    settings_group("display", { "render_scale", "output_4k", "gamma", "sharp_text" });
     ImGui::TextWrapped("Render scale 4 draws the game at 3413x1920 in 16:9, close to 4K; lower it if the frame counter "
                        "drops below 60. The picture shape, render scale, 4K output and brightness curve apply the next "
                        "time the game starts; the filter applies at once.");

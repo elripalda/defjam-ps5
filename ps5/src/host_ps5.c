@@ -453,18 +453,90 @@ static int (*s_game_main)(void);
 static int s_game_result;
 
 /* A line in the log now and then, so a black screen still says whether the
- * game is moving (the guest's indirect-call count) or stuck. */
+ * game is moving (the guest's indirect-call count) or stuck, and where each
+ * guest thread is: a few samples of its host pc, taken with a signal.
+ * test-N-llvm-pie.elf names them (the image starts at 0x400000). */
 extern volatile uint64_t g_icall_count;
+uint64_t mmio_trap_fault_count(void);
+void mmio_trap_last_faults(uintptr_t addr[8], uintptr_t pc[8]);
+uint64_t mmio_trap_neighbour_count(void);
+
+#define PS5_MAX_GUEST_THREADS 32
+static pthread_t s_guest_threads[PS5_MAX_GUEST_THREADS];
+static volatile int s_guest_thread_count;
+static volatile uintptr_t s_sample_pc;
+static volatile int s_sample_seq;
+
+void ps5_guest_thread_register(void)
+{
+    int n = __atomic_fetch_add(&s_guest_thread_count, 1, __ATOMIC_SEQ_CST);
+    if (n < PS5_MAX_GUEST_THREADS)
+        s_guest_threads[n] = pthread_self();
+}
+
+static void sample_handler(int sig, siginfo_t *si, void *uctx)
+{
+    (void)sig; (void)si;
+    /* rip: slot 20 of the mcontext, 64 bytes in (mmio_trap.c). */
+    s_sample_pc = ((uint64_t *)((uint8_t *)uctx + 64))[20];
+    __atomic_add_fetch(&s_sample_seq, 1, __ATOMIC_SEQ_CST);
+}
+
+static uintptr_t sample_thread(pthread_t t)
+{
+    int seq = s_sample_seq, i;
+    s_sample_pc = 0;
+    if (pthread_kill(t, SIGUSR1) != 0)
+        return 0;
+    for (i = 0; i < 200 && s_sample_seq == seq; i++)
+        usleep(100);
+    return s_sample_seq == seq ? 1 : s_sample_pc;
+}
+
+static void sample_guest_threads(void)
+{
+    int n = s_guest_thread_count, t, k;
+    if (n > PS5_MAX_GUEST_THREADS)
+        n = PS5_MAX_GUEST_THREADS;
+    for (t = 0; t < n; t++) {
+        char line[512];
+        int len = snprintf(line, sizeof line, "[PS5]   thread %d pcs:", t);
+        for (k = 0; k < 8 && len < (int)sizeof line - 20; k++) {
+            uintptr_t pc = sample_thread(s_guest_threads[t]);
+            len += snprintf(line + len, sizeof line - len, " %lx", (unsigned long)pc);
+            usleep(3000);
+        }
+        fprintf(stderr, "%s\n", line);
+    }
+    {
+        uintptr_t a[8], p[8];
+        mmio_trap_last_faults(a, p);
+        fprintf(stderr, "[PS5]   traps %llu (neighbour pages %llu), last at"
+                " %lx/%lx %lx/%lx %lx/%lx %lx/%lx\n",
+                (unsigned long long)mmio_trap_fault_count(),
+                (unsigned long long)mmio_trap_neighbour_count(),
+                (unsigned long)a[0], (unsigned long)p[0], (unsigned long)a[1], (unsigned long)p[1],
+                (unsigned long)a[2], (unsigned long)p[2], (unsigned long)a[3], (unsigned long)p[3]);
+    }
+}
 
 static void *heartbeat_thread(void *unused)
 {
-    unsigned secs = 0, step = 10;
+    unsigned secs = 0, step = 5;
+    struct sigaction sa;
     (void)unused;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = sample_handler;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGUSR1, &sa, NULL);
     for (;;) {
         sleep(step);
         secs += step;
-        fprintf(stderr, "[PS5] still running after %u s, guest calls %llu\n",
-                secs, (unsigned long long)g_icall_count);
+        fprintf(stderr, "[PS5] still running after %u s, guest calls %llu, %d guest thread(s)\n",
+                secs, (unsigned long long)g_icall_count, (int)s_guest_thread_count);
+        if (secs <= 60)
+            sample_guest_threads();
         if (secs >= 120)
             step = 60;
     }

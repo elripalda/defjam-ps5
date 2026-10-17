@@ -673,28 +673,34 @@ static void open_up_tree(const char *dir, int depth)
     closedir(d);
 }
 
-/* ── Saves ───────────────────────────────────────────────────────────────
- * Saves live outside the app, in /data/DefJamFFNY/save, so deleting or
- * replacing the app folder never takes them (DEFJAM_SAVE overrides it). The
- * first start of a build that does this copies the old <app>/save across and
- * leaves the original where it was. */
-#define SAVE_HOME "/data/DefJamFFNY"
+/* ── Saves and settings ──────────────────────────────────────────────────
+ * Saves and settings.ini live outside the app, so deleting or replacing the
+ * app folder never takes them: the first of these folders the app can write
+ * files in (DEFJAM_SAVE overrides the saves' place). The first start of a build
+ * that does this copies the old ones across and leaves the originals. When
+ * none can be written, both stay in the app folder as before. */
+static const char *const k_homes[] = { "/data/DefJamFFNY", "/data/homebrew/DefJamFFNY" };
+static const char *s_home;
+static int s_home_checked;
+
+static void say_fail(const char *what, const char *path)
+{
+    static int said;
+    if (said++ < 8)
+        fprintf(stderr, "[PS5] %s %s: %s\n", what, path, strerror(errno));
+}
 
 static int copy_file(const char *from, const char *to)
 {
     char buf[65536];
     ssize_t n = 0;
     int in = open(from, O_RDONLY), out, bad = 0;
-    if (in < 0)
-        return -1;
+    if (in < 0) { say_fail("cannot read", from); return -1; }
     out = open(to, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (out < 0) {
-        close(in);
-        return -1;
-    }
+    if (out < 0) { say_fail("cannot create", to); close(in); return -1; }
     while ((n = read(in, buf, sizeof buf)) > 0)
-        if (write(out, buf, (size_t)n) != n) { bad = 1; break; }
-    if (n < 0) bad = 1;
+        if (write(out, buf, (size_t)n) != n) { say_fail("cannot write", to); bad = 1; break; }
+    if (n < 0) { say_fail("cannot read", from); bad = 1; }
     close(in);
     if (close(out) != 0) bad = 1;
     return bad ? -1 : 0;
@@ -706,16 +712,15 @@ static int copy_tree(const char *from, const char *to, int depth)
     struct dirent *e;
     char a[768], b[768];
     int bad = 0;
-    if (depth > 8 || !(d = opendir(from)))
-        return -1;
-    mkdir(to, 0777);
+    if (depth > 8 || !(d = opendir(from))) { say_fail("cannot open", from); return -1; }
+    if (mkdir(to, 0777) != 0 && errno != EEXIST) { say_fail("cannot make", to); closedir(d); return -1; }
     while ((e = readdir(d)) != NULL) {
         struct stat st;
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
             continue;
         snprintf(a, sizeof a, "%s/%s", from, e->d_name);
         snprintf(b, sizeof b, "%s/%s", to, e->d_name);
-        if (lstat(a, &st) != 0) { bad = 1; continue; }
+        if (lstat(a, &st) != 0) { say_fail("cannot stat", a); bad = 1; continue; }
         if (S_ISDIR(st.st_mode)) { if (copy_tree(a, b, depth + 1)) bad = 1; }
         else if (S_ISREG(st.st_mode) && copy_file(a, b)) bad = 1;
     }
@@ -723,34 +728,82 @@ static int copy_tree(const char *from, const char *to, int depth)
     return bad ? -1 : 0;
 }
 
+/* Whether files can be made in `dir` (made if missing): a small file is written and removed. */
+static int writable_dir(const char *dir)
+{
+    char probe[600];
+    int fd;
+    if (mkdir(dir, 0777) != 0 && errno != EEXIST) { say_fail("cannot make", dir); return 0; }
+    snprintf(probe, sizeof probe, "%s/.probe", dir);
+    fd = open(probe, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0) { say_fail("cannot create", probe); return 0; }
+    if (write(fd, "ok", 2) != 2) { say_fail("cannot write", probe); close(fd); unlink(probe); return 0; }
+    close(fd);
+    unlink(probe);
+    return 1;
+}
+
+/* The folder outside the app for saves and settings, or NULL for the app folder. */
+const char *ps5_data_home(void)
+{
+    size_t i;
+    if (s_home_checked)
+        return s_home;
+    s_home_checked = 1;
+    for (i = 0; i < sizeof k_homes / sizeof k_homes[0] && !s_home; i++)
+        if (writable_dir(k_homes[i]))
+            s_home = k_homes[i];
+    if (s_home)
+        fprintf(stderr, "[PS5] saves and settings live in %s\n", s_home);
+    else
+        fprintf(stderr, "[PS5] saves and settings stay in the app folder (no folder outside it can be written)\n");
+    return s_home;
+}
+
+/* settings.ini's place: in the home when there is one (copied from the app folder the first time). */
+const char *ps5_settings_path(char *out, size_t size)
+{
+    const char *home = ps5_data_home();
+    char old[512];
+    struct stat st;
+    snprintf(old, sizeof old, "%s/settings.ini", ps5_root());
+    if (!home) {
+        snprintf(out, size, "%s", old);
+        return out;
+    }
+    snprintf(out, size, "%s/settings.ini", home);
+    if (stat(out, &st) != 0 && stat(old, &st) == 0 && copy_file(old, out) == 0)
+        fprintf(stderr, "[PS5] settings.ini copied to %s\n", home);
+    return out;
+}
+
 const char *ps5_save_dir(void)
 {
     static char dir[512];
     char old[512], part[560];
     struct stat st;
-    const char *env = getenv("DEFJAM_SAVE");
+    const char *env = getenv("DEFJAM_SAVE"), *home;
     if (dir[0])
         return dir;
     if (env && *env) {
         snprintf(dir, sizeof dir, "%s", env);
         return dir;
     }
-    snprintf(dir, sizeof dir, SAVE_HOME "/save");
     snprintf(old, sizeof old, "%s/save", ps5_root());
-    if (mkdir(SAVE_HOME, 0777) != 0 && errno != EEXIST) {
-        /* An app the console keeps to its own folder cannot reach /data. */
-        fprintf(stderr, "[PS5] saves stay in %s (%s: %s)\n", old, SAVE_HOME, strerror(errno));
+    home = ps5_data_home();
+    if (!home) {
         snprintf(dir, sizeof dir, "%s", old);
         return dir;
     }
+    snprintf(dir, sizeof dir, "%s/save", home);
     if (stat(dir, &st) == 0 || stat(old, &st) != 0 || !S_ISDIR(st.st_mode))
         return dir;                              /* already moved, or nothing to move */
     snprintf(part, sizeof part, "%s.copying", dir);
     if (copy_tree(old, part, 0) == 0 && rename(part, dir) == 0) {
-        fprintf(stderr, "[PS5] saves moved to %s (the old copy stays in %s)\n", dir, old);
+        fprintf(stderr, "[PS5] saves copied to %s (the old ones stay in %s)\n", dir, old);
     } else {
         /* Keep playing on the old folder rather than start from nothing. */
-        fprintf(stderr, "[PS5] could not copy the saves to %s (%s); still using %s\n", dir, strerror(errno), old);
+        say_fail("could not copy the saves to", dir);
         snprintf(dir, sizeof dir, "%s", old);
     }
     return dir;
@@ -765,7 +818,8 @@ static void open_up_app_files(void)
         snprintf(path, sizeof path, "%s/%s", ps5_root(), subs[i]);
         open_up_tree(path, 0);
     }
-    open_up_tree(SAVE_HOME, 0);
+    if (s_home)
+        open_up_tree(s_home, 0);
 }
 
 /* How long the basic things the runtime leans on take here, once at start. */

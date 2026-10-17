@@ -38,13 +38,8 @@ size_t pc_ui_settings(RecompSetting *out, size_t max)
 #endif
     ADD("ui", "scale", RECOMP_SETTING_INT, 100, 60, 250, NULL, NULL, 0,
         "Size of the launcher and overlay text and controls in percent, on top of your display's scaling.");
-#if defined(__PROSPERO__)
-    ADD("ui", "show_fps", RECOMP_SETTING_BOOL, 1, 0, 0, NULL, NULL, 0,
-        "A frame counter in the top corner of the screen while you play.");
-#else
     ADD("ui", "show_fps", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, 0,
         "A frame counter in the top corner of the screen while you play.");
-#endif
 #undef ADD
     return n;
 }

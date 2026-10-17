@@ -111,6 +111,8 @@ static RecompSetting g_display_settings[] = {
       "Redraw the game's menu text at four times its size with clean edges, instead of stretching it." },
     { "display", "border", RECOMP_SETTING_ENUM, 0, 0, 0, k_border, NULL, RECOMP_SETTING_RESTART,
       "Which picture fills the sides with the border: borders/border-logo.png, -red, -gold or border.png." },
+    { "textures", "menus", RECOMP_SETTING_BOOL, 1, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
+      "The AI-remastered menus and HUD (mods/hd-menus). The HD textures switch covers the other packs." },
     { "display", "frame_gen", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
       "Beta: 120 Hz output with a generated picture between every two frames (MihawkGen). Needs a 120 Hz TV." },
 #endif
@@ -542,7 +544,14 @@ int pc_settings_init(void)
     } else if (env && *env) {
         snprintf(g_path, sizeof(g_path), "%s", env);
     } else if (have_root) {
+#if defined(__PROSPERO__)
+        /* [ps5 port] Beside the saves, outside the app folder when it can be (ps5/src/host_ps5.c). */
+        extern const char *ps5_settings_path(char *out, size_t size);
+        ps5_settings_path(g_path, sizeof(g_path));
+        (void)root;
+#else
         snprintf(g_path, sizeof(g_path), "%s" HOST_SEP "settings.ini", root);
+#endif
     } else if (program_dir(g_path, MAX_PATH)) {
         strcat(g_path, HOST_SEP "settings.ini");
     }
@@ -573,7 +582,7 @@ int pc_settings_init(void)
         /* [ps5 port] A settings.ini written by an earlier build holds that
          * build's defaults (4:3, twice the console's resolution), which win
          * over new ones. Once per new set: bring it up to this build's. */
-        enum { PS5_DEFAULTS = 24 };
+        enum { PS5_DEFAULTS = 25 };
         int had = recomp_settings_get("ps5", "defaults", 0);
         if (had < 22)       /* the border beside 4:3 menus */
             recomp_settings_set("display", "widescreen_side_fill", DEFAULT_SIDE_FILL);
@@ -583,6 +592,10 @@ int pc_settings_init(void)
         }
         if (had < 24)       /* no buzz when the game starts */
             recomp_settings_set("input", "rumble_on_connect", 0);
+        if (had < 25) {     /* v1.0: no frame counter; the HD menus on */
+            recomp_settings_set("ui", "show_fps", 0);
+            recomp_settings_set("textures", "menus", 1);
+        }
         if (had < 21) {
             recomp_settings_set("display", "aspect", DEFAULT_ASPECT);
             recomp_settings_set("display", "render_scale", DEFAULT_RENDER_SCALE);
@@ -618,6 +631,7 @@ int pc_settings_init(void)
              * they are on, and the owner's art in custom/, listed last so it wins. Then the text (ps5_text.c). */
             extern void ps5_text_prepare(int playstation);
             int hd = recomp_settings_get("textures", "enabled", 1);
+            int menus = recomp_settings_get("textures", "menus", 1);
             if (!getenv("RECOMP_TEXTURE_PACKS")) {
                 /* Every folder in mods/ is a pack: the HD packs in name order, then playstation
                  * (an HD pack holds the Xbox buttons too), then custom: the last one wins. */
@@ -627,10 +641,13 @@ int pc_settings_init(void)
                 struct dirent *ent;
                 const char *data = getenv("DEFJAM_DATA");
                 snprintf(dir, sizeof dir, "%s/mods", data && *data ? data : ".");
-                if (hd && (d = opendir(dir)) != NULL) {
+                if ((hd || menus) && (d = opendir(dir)) != NULL) {
                     while ((ent = readdir(d)) != NULL && n < 32) {
                         if (ent->d_name[0] == '.' || !strcmp(ent->d_name, "playstation") ||
                             !strcmp(ent->d_name, "custom") || strlen(ent->d_name) >= sizeof names[0])
+                            continue;
+                        /* hd-menus (the AI menus and HUD) has a switch of its own */
+                        if (!strncmp(ent->d_name, "hd-menus", 8) ? !menus : !hd)
                             continue;
                         snprintf(names[n++], sizeof names[0], "%s", ent->d_name);
                     }

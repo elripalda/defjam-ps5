@@ -8,6 +8,8 @@
 // Needs from pc_ui.cpp: find(), commit(), restart_needed(), the pad capture (g_capture, capture_start,
 // capture_cancel, capture_poll_pad, ui_capturing), ui_ticks(), g_font_display and g_font_body_mid.
 
+#define PS5_PORT_VERSION "1.0.0"
+
 namespace ps5ui {
 
 const ImU32 kAccent    = IM_COL32(226, 30, 38, 255);
@@ -308,7 +310,8 @@ void page_video()
         else if (asked != ROW_NONE) set_value(s, s->stored < s->max ? s->stored + 1 : s->min);
     }
     toggle_row("display", "output_4k", "4K output", "Send 3840×2160 to the TV. Off sends 1080p.");
-    toggle_row("textures", "enabled", "HD textures", "The remastered menu and HUD pictures in the mods folder.");
+    toggle_row("textures", "enabled", "HD textures", "Fighters, venues and crowds at 4x (the HD pack in mods).");
+    toggle_row("textures", "menus", "HD menus", "The remastered menus and HUD (mods/hd-menus).");
     toggle_row("display", "sharp_text", "Sharper text", "Menu text redrawn with clean edges.");
     toggle_row("display", "gamma", "Original brightness", "The game's own brightness curve, as it shipped.");
 
@@ -504,9 +507,11 @@ void page_game()
     }
 
     section("ABOUT");
-    info_row("version", "Version", DEFJAM_VERSION);
+    info_row("recomp", "PC recompilation", "Vlad Yanhursky  ·  DefJamFFNY-recomp");
+    info_row("toolkit", "Recompiler", "sp00nz  ·  xboxrecomp");
     info_row("port", "PlayStation 5 port", "@elripalda");
-    info_row("built", "Built on", "DefJamFFNY-recomp  ·  xboxrecomp");
+    info_row("framegen", "Frame generation", "mihawk-99  ·  MihawkGen");
+    info_row("version", "Version", PS5_PORT_VERSION);
     info_row("licences", "Also uses", "Dear ImGui  ·  SDL3  ·  Bebas Neue  ·  Oswald");
 }
 

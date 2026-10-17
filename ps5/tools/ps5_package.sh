@@ -101,7 +101,7 @@ cat > "$app/sce_sys/param.json" <<EOF
   "applicationDrmType": "free",
   "attribute": 0,
   "attribute2": 0,
-  "attribute3": 0,
+  "attribute3": 524352,
   "conceptId": "${title_id:4}",
   "contentBadgeType": 1,
   "contentId": "UP9000-${title_id}_00-DEFJAMFFNYPS5000",
@@ -150,6 +150,13 @@ Oswald-Regular.ttf: Oswald by Vernon Adams and the Oswald Project Authors, OFL 1
 BebasNeue-Regular.ttf: Bebas Neue by Dharma Type, OFL 1.1 (OFL-BebasNeue.txt).
 TXT
 fi
+# Frame generation (beta): MihawkGen's network (GPL-3.0-or-later, ps5/third_party/mihawkgen).
+mkdir -p "$app/framegen"
+cp "$port/ps5/third_party/mihawkgen/models/network.fgw" "$port/ps5/third_party/mihawkgen/LICENSE.md" "$app/framegen/"
+cat > "$app/framegen/README.txt" <<'TXT'
+network.fgw is MihawkGen's trained network (https://github.com/mihawk-99/PS5_MihawkGen),
+used by Video > Frame generation (beta) in the in-game menu. GPL-3.0-or-later: LICENSE.md.
+TXT
 # The border beside 4:3 menus (display.widescreen_side_fill = border); replaceable.
 # ps5/assets is not tracked; the default picture is made by ps5/tools/make_border.py.
 if [[ ! -f $port/ps5/assets/borders/border.png ]]; then

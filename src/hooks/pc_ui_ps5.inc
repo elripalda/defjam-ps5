@@ -314,6 +314,8 @@ void page_video()
 
     section("SCREEN");
     toggle_row("ui", "show_fps", "Frame counter", "Frames per second in the corner.");
+    toggle_row("display", "frame_gen", "Frame generation (beta)",
+               "120 fps on a 120 Hz TV: a made-up picture between every two frames. Adds a little input lag.");
 }
 
 const char *pad_source_label(int src)

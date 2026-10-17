@@ -93,7 +93,14 @@ if(DEFJAM_BUILD_GAME)
         # sends the picture to the TV and reads the DualSense.
         list(FILTER HOOK_SOURCES EXCLUDE REGEX "/(watchpoint\\.c|pc_launcher\\.cpp|pc_launcher_sdl\\.cpp)$")
         set(HOST_SOURCES ps5/src/host_ps5.c ps5/src/ps5_libc_compat.c ps5/src/ps5_profile.c
-                         ps5/src/ps5_gamewatch.c ps5/src/ps5_text.c)
+                         ps5/src/ps5_gamewatch.c ps5/src/ps5_text.c ps5/src/ps5_framegen.cpp)
+        # Frame generation (beta): MihawkGen, GPL-3.0-or-later (ps5/third_party/mihawkgen).
+        set(MIHAWKGEN_SOURCES ps5/third_party/mihawkgen/src/fg_common.cpp ps5/third_party/mihawkgen/src/fg_neural.cpp
+                              ps5/third_party/mihawkgen/src/fg_splat.cpp ps5/third_party/mihawkgen/src/fg_vulkan.cpp)
+        list(APPEND HOST_SOURCES ${MIHAWKGEN_SOURCES})
+        set_source_files_properties(${MIHAWKGEN_SOURCES} ps5/src/ps5_framegen.cpp PROPERTIES
+            COMPILE_OPTIONS "-std=gnu++20;-Wno-everything"
+            INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/ps5/third_party/mihawkgen/include")
         find_package(SDL3 REQUIRED CONFIG)
         include(imgui)
     else()

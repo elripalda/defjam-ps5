@@ -111,6 +111,8 @@ static RecompSetting g_display_settings[] = {
       "Redraw the game's menu text at four times its size with clean edges, instead of stretching it." },
     { "display", "border", RECOMP_SETTING_ENUM, 0, 0, 0, k_border, NULL, RECOMP_SETTING_RESTART,
       "Which picture fills the sides with the border: borders/border-logo.png, -red, -gold or border.png." },
+    { "display", "frame_gen", RECOMP_SETTING_BOOL, 0, 0, 0, NULL, NULL, RECOMP_SETTING_RESTART,
+      "Beta: 120 Hz output with a generated picture between every two frames (MihawkGen). Needs a 120 Hz TV." },
 #endif
 };
 #define DISPLAY_SETTING_COUNT (sizeof(g_display_settings) / sizeof(g_display_settings[0]))

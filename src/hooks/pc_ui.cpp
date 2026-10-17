@@ -139,6 +139,7 @@ static const char *friendly(const char *section, const char *key)
         { "ui", "overlay_pad", "Overlay pad buttons" }, { "ui", "overlay_key", "Overlay key" },
         { "display", "output_4k", "4K output" }, { "ui", "show_fps", "Frame counter" },
         { "display", "border", "Border" }, { "display", "sharp_text", "Sharper text" },
+        { "display", "frame_gen", "Frame generation" },
     };
     for (const Label &l : labels)
         if (!strcmp(l.section, section) && !strcmp(l.key, key)) return l.text;

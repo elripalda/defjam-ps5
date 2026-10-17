@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -299,7 +300,7 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     VkExtent2D extent = { 1920, 1080 };
     uint32_t plane = 0;
     VkDisplaySurfaceCreateInfoKHR ci;
-    int want_4k = pc_display("output_4k", 0);
+    int want_4k = pc_display("output_4k", 0), want_120 = pc_display("frame_gen", 0);
     (void)user;
 
     if (vkEnumeratePhysicalDevices(instance, &n, &phys) < 0 || !phys) {
@@ -322,12 +323,42 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
         int best = -1;
         if (vkGetDisplayModePropertiesKHR(phys, displays[i].display, &modes_n, modes) < 0 || !modes_n)
             continue;
-        /* 1080p by default (the game draws at a few times its 640x480, and
-         * the TV scales); 4K when the setting asks and the TV offers it. */
-        for (m = 0; m < modes_n; m++) {
+        {
+            char list[1024];
+            size_t at = 0;
+            list[0] = 0;
+            for (m = 0; m < modes_n && at < sizeof list - 32; m++)
+                at += (size_t)snprintf(list + at, sizeof list - at, "%s%ux%u@%u", m ? " " : "",
+                                       modes[m].parameters.visibleRegion.width,
+                                       modes[m].parameters.visibleRegion.height,
+                                       (modes[m].parameters.refreshRate + 500) / 1000);
+            fprintf(stderr, "[PS5] display modes: %s\n", list);
+        }
+        /* With frame generation, 120 Hz: 4K when asked, else 1440p or 1080p,
+         * whichever the TV offers at 120. Otherwise (or when it offers none)
+         * 1080p at 60 by default (the game draws at a few times its 640x480,
+         * and the TV scales); 4K when the setting asks and the TV offers it. */
+        if (want_120) {
+            static const uint32_t sizes[3][2] = { { 3840, 2160 }, { 2560, 1440 }, { 1920, 1080 } };
+            uint32_t k;
+            for (k = want_4k ? 0 : 1; k < 3 && best < 0; k++)
+                for (m = 0; m < modes_n; m++) {
+                    VkExtent2D e = modes[m].parameters.visibleRegion;
+                    if (e.width == sizes[k][0] && e.height == sizes[k][1] &&
+                        modes[m].parameters.refreshRate >= 119000) { best = (int)m; break; }
+                }
+        }
+        for (m = 0; m < modes_n && best < 0; m++) {
             VkExtent2D e = modes[m].parameters.visibleRegion;
+            uint32_t hz = (modes[m].parameters.refreshRate + 500) / 1000;
+            if (hz && (hz < 59 || hz > 61))
+                continue;
             if (want_4k && e.width == 3840 && e.height == 2160) { best = (int)m; break; }
-            if (e.width == 1920 && e.height == 1080 && best < 0) best = (int)m;
+        }
+        for (m = 0; m < modes_n && best < 0; m++) {
+            VkExtent2D e = modes[m].parameters.visibleRegion;
+            uint32_t hz = (modes[m].parameters.refreshRate + 500) / 1000;
+            if (e.width == 1920 && e.height == 1080 && (!hz || (hz >= 59 && hz <= 61))) best = (int)m;
         }
         if (best < 0)
             best = 0;
@@ -362,6 +393,15 @@ static int create_surface(void *instance_p, void *surface_p, void *user)
     s_width = extent.width;
     s_height = extent.height;
     fprintf(stderr, "[PS5] TV output %ux%u at %u Hz\n", s_width, s_height, s_refresh);
+    if (want_120) {
+        extern void ps5_framegen_register(void);
+        if (s_refresh >= 100) {
+            ps5_framegen_register();
+            fprintf(stderr, "[PS5] frame generation (beta): on\n");
+        } else {
+            fprintf(stderr, "[PS5] frame generation (beta): the TV offers no 120 Hz mode, so it stays off\n");
+        }
+    }
     (fflush)(stderr);
     sceSystemServiceHideSplashScreen();
     return 1;
@@ -697,17 +737,20 @@ const char *ps5_save_dir(void)
     }
     snprintf(dir, sizeof dir, SAVE_HOME "/save");
     snprintf(old, sizeof old, "%s/save", ps5_root());
-    if (stat(dir, &st) == 0 || stat(old, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        mkdir(SAVE_HOME, 0777);
-        return dir;                              /* already moved, or nothing to move */
+    if (mkdir(SAVE_HOME, 0777) != 0 && errno != EEXIST) {
+        /* An app the console keeps to its own folder cannot reach /data. */
+        fprintf(stderr, "[PS5] saves stay in %s (%s: %s)\n", old, SAVE_HOME, strerror(errno));
+        snprintf(dir, sizeof dir, "%s", old);
+        return dir;
     }
-    mkdir(SAVE_HOME, 0777);
+    if (stat(dir, &st) == 0 || stat(old, &st) != 0 || !S_ISDIR(st.st_mode))
+        return dir;                              /* already moved, or nothing to move */
     snprintf(part, sizeof part, "%s.copying", dir);
     if (copy_tree(old, part, 0) == 0 && rename(part, dir) == 0) {
         fprintf(stderr, "[PS5] saves moved to %s (the old copy stays in %s)\n", dir, old);
     } else {
         /* Keep playing on the old folder rather than start from nothing. */
-        fprintf(stderr, "[PS5] could not copy the saves to %s; still using %s\n", dir, old);
+        fprintf(stderr, "[PS5] could not copy the saves to %s (%s); still using %s\n", dir, strerror(errno), old);
         snprintf(dir, sizeof dir, "%s", old);
     }
     return dir;

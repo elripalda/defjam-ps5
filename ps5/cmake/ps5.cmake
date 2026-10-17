@@ -23,7 +23,11 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(_vk_sources
     "${XBOXRECOMP_DIR}/src/d3d/d3d8_vk.c"
     "${DEFJAM_PS5_DIR}/src/host_ps5.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/hooks/pc_ui.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/hooks/pc_ui.cpp"
+    "${DEFJAM_PS5_DIR}/third_party/mihawkgen/src/fg_vulkan.cpp"
+    "${DEFJAM_PS5_DIR}/third_party/mihawkgen/src/fg_neural.cpp"
+    "${DEFJAM_PS5_DIR}/third_party/mihawkgen/src/fg_splat.cpp"
+    "${DEFJAM_PS5_DIR}/third_party/mihawkgen/src/fg_common.cpp")
 if(DEFJAM_PS5_IMGUI_DIR)
   list(APPEND _vk_sources "${DEFJAM_PS5_IMGUI_DIR}/backends/imgui_impl_vulkan.cpp")
 endif()

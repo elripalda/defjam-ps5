@@ -245,10 +245,12 @@ static int find_game_root(void)
     char dir[PATH_MAX], probe[PATH_MAX + 32];
     int up;
 
-#ifdef DEFJAM_GAME_DIR_NAME
-    /* [ps5 port] host_ps5.c made the app's folder current; the disc is in GameData. */
-    (void)dir; (void)probe; (void)up;
-    return file_exists(DEFJAM_GAME_DIR_NAME "/default.xbe");
+#if defined(__PROSPERO__)
+    {   /* [ps5 port] the disc is in <app folder>/GameData (ps5/src/host_ps5.c) */
+        extern const char *ps5_game_xbe(void);
+        (void)dir; (void)probe; (void)up;
+        return file_exists(ps5_game_xbe());
+    }
 #endif
     if (file_exists("game/default.xbe"))
         return 1;

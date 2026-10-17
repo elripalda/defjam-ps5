@@ -371,6 +371,37 @@ static void ps5_fatal(const char *message)
     _exit(1);
 }
 
+/* ── Paths ─────────────────────────────────────────────────────────────── */
+
+/* The app's folder, found by looking for its eboot.bin: /app0 is how an app
+ * sees its own folder, and /data/homebrew/PPSA92004 is where it is installed. */
+static char s_root[256], s_game_dir[300], s_game_xbe[320];
+
+const char *ps5_root(void)
+{
+    static const char *const candidates[] = { DEFJAM_PS5_ROOT, DEFJAM_PS5_ROOT_ALT };
+    struct stat st;
+    char probe[300];
+    size_t i;
+
+    if (s_root[0])
+        return s_root;
+    snprintf(s_root, sizeof s_root, "%s", DEFJAM_PS5_ROOT_ALT);
+    for (i = 0; i < sizeof candidates / sizeof candidates[0]; i++) {
+        snprintf(probe, sizeof probe, "%s/eboot.bin", candidates[i]);
+        if (stat(probe, &st) == 0) {
+            snprintf(s_root, sizeof s_root, "%s", candidates[i]);
+            break;
+        }
+    }
+    snprintf(s_game_dir, sizeof s_game_dir, "%s/GameData", s_root);
+    snprintf(s_game_xbe, sizeof s_game_xbe, "%s/default.xbe", s_game_dir);
+    return s_root;
+}
+
+const char *ps5_game_dir(void) { ps5_root(); return s_game_dir; }
+const char *ps5_game_xbe(void) { ps5_root(); return s_game_xbe; }
+
 /* ── Start-up ──────────────────────────────────────────────────────────── */
 
 static int (*s_game_main)(void);
@@ -389,28 +420,34 @@ int host_posix_run(int (*game_main)(void))
     pthread_attr_t attr;
     char log[512];
 
-    const char *root = DEFJAM_PS5_ROOT;
+    const char *root = ps5_root();
     struct stat st;
 
-    ps5_notify("Def Jam: Fight for NY is starting");
-    if (chdir(root) != 0) {
-        root = DEFJAM_PS5_ROOT_ALT;
-        if (chdir(root) != 0)
-            ps5_fatal("Def Jam can't open its app folder (/app0)");
+    {
+        char msg[300];
+        snprintf(msg, sizeof msg, "Def Jam is starting (app folder: %s)", root);
+        ps5_notify(msg);
     }
+    /* chdir does not take in an app on every firmware (FIFA Street ignores
+     * its result too): every path below is absolute instead. */
+    (void)chdir(root);
     if (!getenv("DEFJAM_DATA"))
         setenv("DEFJAM_DATA", root, 1);
-    mkdir("logs", 0777);
+    snprintf(log, sizeof log, "%s/logs", root);
+    mkdir(log, 0777);
     snprintf(log, sizeof log, "%s/logs/defjam.log", root);
     if (!freopen(log, "w", stdout))
-        ps5_notify("Def Jam can't write its log in /app0/logs");
+        ps5_notify("Def Jam can't write its log (logs folder in the app folder)");
     snprintf(log, sizeof log, "%s/logs/defjam.log.err", root);
     freopen(log, "w", stderr);
     fprintf(stderr, "[PS5] Def Jam: Fight for NY (PS5) starting in %s\n", root);
     fflush(stderr);
-    if (stat("GameData/default.xbe", &st) != 0)
-        ps5_fatal("Def Jam: game files not found. Copy your extracted USA Xbox disc "
-                  "into the app's GameData folder (default.xbe goes in GameData).");
+    if (stat(ps5_game_xbe(), &st) != 0) {
+        char msg[400];
+        snprintf(msg, sizeof msg, "Def Jam: game files not found. Copy your extracted USA Xbox disc "
+                 "into %s (default.xbe goes in there).", ps5_game_dir());
+        ps5_fatal(msg);
+    }
 
     /* No signal handlers from SDL: the runtime's own fault handler traps the
      * console's device registers and must see every SIGSEGV/SIGBUS first. */

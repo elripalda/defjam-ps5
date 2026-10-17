@@ -101,8 +101,12 @@ extern ptrdiff_t g_xbox_mem_offset;
  */
 #define YOUR_GAME_ENTRY_POINT   0x001F6357  /* XBE entry point VA */
 #define YOUR_GAME_XBE_PATH      "game/default.xbe"   /* forward slashes: fine for CreateFile/fopen */
-#ifdef DEFJAM_GAME_DIR_NAME          /* [ps5 port] GameData, as in the other PS5 ports */
-#define YOUR_GAME_DIR            DEFJAM_GAME_DIR_NAME
+#if defined(__PROSPERO__)            /* [ps5 port] <app folder>/GameData, as in the other PS5 ports */
+const char *ps5_game_dir(void);
+const char *ps5_game_xbe(void);
+#define YOUR_GAME_DIR            ps5_game_dir()
+#undef  YOUR_GAME_XBE_PATH
+#define YOUR_GAME_XBE_PATH       ps5_game_xbe()
 #else
 #define YOUR_GAME_DIR            "game"
 #endif

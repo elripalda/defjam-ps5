@@ -129,7 +129,6 @@ if(DEFJAM_BUILD_GAME)
                               SDL3::SDL3 Vulkan::Vulkan SceUserService ScePad SceSystemService
                               SceAudioOut pthread m)
         target_compile_options(${PROJECT_NAME} PRIVATE -fno-strict-aliasing -fwrapv -ffp-contract=off)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE DEFJAM_GAME_DIR_NAME="GameData")
     else()
         # One SDL for the window, the sound and the pads: SDL3, the system's.
         defjam_app_icon(${PROJECT_NAME})

@@ -7,8 +7,10 @@
 >
 > All the credit and all the love goes to him. Go star the original project and support it.
 
-## Get it on Recomp Store
-The easiest way to play is **[Recomp Store](https://recompstore.com)**. It installs the app, helps you set up your own game files and keeps it up to date.
+## Get it on RecompStore
+The easiest way to play is **[RecompStore](https://recompstore.com)**. It installs the app, helps you set up your own game files and keeps it up to date.
+
+[![Get it on RecompStore](https://recompstore.com/assets/press/badge-dark.svg)](https://recompstore.com/game/PPSA92046)
 
 ## What's in it
 - The original Xbox game recompiled to run natively on the PS5, at 60 fps
